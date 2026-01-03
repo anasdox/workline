@@ -123,6 +123,19 @@ func GenerateDefault(projectID string) string {
 	return fmt.Sprintf(defaultTemplate, projectID)
 }
 
+// LoadOptional returns nil,nil if the config file does not exist.
+func LoadOptional(workspace string) (*Config, error) {
+	path := Path(workspace)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return FromYAML(data)
+}
+
 // Default returns the default Config struct for a project.
 func Default(projectID string) *Config {
 	var cfg Config
@@ -159,6 +172,12 @@ const defaultTemplate = `project:
 
 attestations:
   catalog:
+    requirements.accepted:
+      description: "Team agreed on scope and requirements"
+    design.reviewed:
+      description: "Solution/design reviewed"
+    scope.groomed:
+      description: "Task is sized, dependencies known"
     ci.passed:
       description: "CI pipeline completed successfully"
     review.approved:
@@ -172,6 +191,18 @@ attestations:
 
 policies:
   presets:
+    ready:
+      mode: all
+      require: [requirements.accepted, design.reviewed, scope.groomed]
+
+    done.standard:
+      mode: all
+      require: [ci.passed, review.approved, acceptance.passed]
+
+    done.bugfix:
+      mode: all
+      require: [ci.passed, review.approved]
+
     low:
       mode: any
       require: [ci.passed, review.approved]
@@ -184,23 +215,11 @@ policies:
       mode: all
       require: [ci.passed, review.approved, security.ok]
 
-    feature:
-      mode: all
-      require: [ci.passed, review.approved, acceptance.passed]
-
-    bug:
-      mode: all
-      require: [ci.passed, review.approved]
-
-    technical:
-      mode: all
-      require: [ci.passed, review.approved]
-
   defaults:
     task:
-      feature: feature
-      bug: bug
-      technical: technical
+      feature: done.standard
+      bug: done.bugfix
+      technical: done.standard
       docs: low
       chore: low
 

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"proofline/internal/app"
 	"proofline/internal/config"
 	"proofline/internal/db"
 	"proofline/internal/domain"
@@ -32,6 +33,8 @@ Core concepts (kid-friendly):
 - Workspace: your .proofline toy box with the database and proofline.yml rules every command uses.
 - Project: the one big game inside that box that owns all tasks, iterations, and evidence.
 - Policies: presets say what proof a task needs (none/all/any/threshold of attestation kinds); task types map to presets by default.
+- Definition of Ready (DoR): proof stickers that say a task is ready to start (requirements accepted, design reviewed, scope groomed).
+- Definition of Done (DoD): proof stickers that say a task is truly done (tests passed, review approved, acceptance checked); enforced by presets per task type.
 - Tasks: work items with parents/deps/leases; statuses go planned -> in_progress -> review -> done (rejected/canceled are exits).
 - Iterations: smaller adventures that move pending -> running -> delivered -> validated/rejected; validation can require a catalog attestation.
 - Attestations: proof stickers like ci.passed or review.approved that satisfy policies.
@@ -924,26 +927,10 @@ func serveCmd() *cobra.Command {
 				return err
 			}
 			r := repo.Repo{DB: conn}
-			activeProject := viper.GetString("project")
-			if activeProject == "" {
-				if p, err := r.SingleProject(cmd.Context()); err == nil {
-					activeProject = p.ID
-				} else {
-					return fmt.Errorf("project not specified; use --project")
-				}
-			}
-			cfg, err := r.GetProjectConfig(cmd.Context(), activeProject)
+			_, cfg, err := app.ResolveProjectAndConfig(cmd.Context(), workspace, viper.GetString("project"), r)
 			if err != nil {
-				if errors.Is(err, repo.ErrNotFound) {
-					cfg = config.Default(activeProject)
-					if err := r.UpsertProjectConfig(cmd.Context(), activeProject, cfg); err != nil {
-						return fmt.Errorf("seed project config: %w", err)
-					}
-				} else {
-					return fmt.Errorf("project config missing for %s: %w", activeProject, err)
-				}
+				return err
 			}
-			cfg.Project.ID = activeProject
 			e := engine.New(conn, cfg)
 			handler, err := server.New(server.Config{Engine: e, BasePath: basePath})
 			if err != nil {
@@ -1004,39 +991,10 @@ func withEngine(ctx context.Context, fn func(context.Context, engine.Engine) err
 		return err
 	}
 	r := repo.Repo{DB: conn}
-	activeProject := viper.GetString("project")
-	var fallbackCfg *config.Config
-	if activeProject == "" {
-		if fileCfg, err := config.Load(workspace); err == nil {
-			fallbackCfg = fileCfg
-			activeProject = fileCfg.Project.ID
-		}
-	}
-	if activeProject == "" {
-		if p, err := r.SingleProject(ctx); err == nil {
-			activeProject = p.ID
-		} else {
-			return fmt.Errorf("project not specified; use --project")
-		}
-	}
-	if _, err := r.GetProject(ctx, activeProject); err != nil {
-		return fmt.Errorf("project %s not found in db: %w", activeProject, err)
-	}
-	cfg, err := r.GetProjectConfig(ctx, activeProject)
+	_, cfg, err := app.ResolveProjectAndConfig(ctx, workspace, viper.GetString("project"), r)
 	if err != nil {
-		if errors.Is(err, repo.ErrNotFound) {
-			if fallbackCfg == nil || fallbackCfg.Project.ID != activeProject {
-				fallbackCfg = config.Default(activeProject)
-			}
-			if err := r.UpsertProjectConfig(ctx, activeProject, fallbackCfg); err != nil {
-				return fmt.Errorf("seed project config: %w", err)
-			}
-			cfg = fallbackCfg
-		} else {
-			return fmt.Errorf("project config missing for %s; import with 'pl project config import --project %s --file <path>'", activeProject, activeProject)
-		}
+		return err
 	}
-	cfg.Project.ID = activeProject
 	e := engine.New(conn, cfg)
 	return fn(ctx, e)
 }

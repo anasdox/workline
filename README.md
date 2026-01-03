@@ -1,7 +1,7 @@
 Proofline CLI (`pl`)
 ====================
 
-Proofline stores all state in SQLite at `.proofline/proofline.db` and requires a project configuration file at `.proofline/proofline.yml`.
+Proofline stores all state in SQLite at `.proofline/proofline.db`. Project configs (attestations + policies) live in the DB; you can import from `.proofline/proofline.yml` if you want to override defaults.
 
 Core Concepts (explained simply)
 --------------------------------
@@ -9,6 +9,8 @@ Core Concepts (explained simply)
 - Workspace: the `.proofline/` folder is your toy box; it holds the database and `proofline.yml` rules every command uses. Example: running `pl init --project-id myproj` builds this box.
 - Project: the one big game you are playing in this workspace. Everything—iterations, tasks, evidence—belongs to this project.
 - Policy presets (`policies.presets`): ready-made rules that say which proof is needed. Think: "before dessert you must finish veggies." Example: preset `high` might require `ci.passed`, `review.approved`, and `security.ok`.
+- Definition of Ready (DoR): proof that a task is ready to start (e.g., `requirements.accepted`, `design.reviewed`, `scope.groomed`). Use the `ready` preset to gate work.
+- Definition of Done (DoD): proof that a task is really done (e.g., `ci.passed`, `review.approved`, `acceptance.passed`). Task types map to DoD presets by default.
 - Tasks: the pieces of work (feature, bug, doc). They can depend on others or have children. Status path is `planned -> in_progress -> review -> done` (with `rejected`/`canceled` side exits). Example: `pl task create --type feature --title "Login"` makes a new task; `pl task done <id> --work-proof-json '{}'` tries to finish it after checks.
 - Iterations: short adventures inside the big game. Start `pending`, go `running`, then `delivered`, and finally `validated` when the right proof is present. Example: `pl iteration set-status iter-1 --status validated` requires the configured attestation unless `--force`.
 - Attestations: proof stickers you attach to tasks or iterations (kinds live in the catalog). Example: after tests pass, add `pl attest add --entity-kind task --entity-id <id> --kind ci.passed`.
@@ -25,16 +27,16 @@ Initialization
 --------------
 - Run `pl init --project-id <id>` to create the workspace, database, and default config.
 - Default config (editable) is generated with:
-  - Attestation catalog entries for `ci.passed`, `review.approved`, `acceptance.passed`, `security.ok`, `iteration.approved`.
-  - Policy presets: `low`, `medium`, `high`, `feature`, `bug`, `technical` as defined in the generated YAML.
-  - Task defaults mapping task types to presets, and iteration validation requiring `iteration.approved`.
+  - Attestation catalog entries for readiness and done checks: `requirements.accepted`, `design.reviewed`, `scope.groomed`, `ci.passed`, `review.approved`, `acceptance.passed`, `security.ok`, `iteration.approved`.
+  - Policy presets: `ready` (DoR), `done.standard`, `done.bugfix`, plus `low/medium/high`.
+  - Task defaults map to DoD presets (`feature`→`done.standard`, `bug`→`done.bugfix`, etc.), and iteration validation requires `iteration.approved`.
 - `pl init` records events `project.init` and `config.created`.
 
 Configuration
 -------------
-- `.proofline/proofline.yml` is the single source of truth for validation policies and attestation catalog.
-- All commands load and validate this file; commands fail if it is missing or invalid (except `pl init` which creates it).
-- Validate config: `pl config validate` (or inspect with `pl config show` / `--json`).
+- Project configs live in the DB. If no config exists for a project, a default is auto-seeded.
+- You can import overrides from a YAML file: `pl project config import --file .proofline/proofline.yml`.
+- Inspect/validate: `pl config show` and `pl config validate` (or `--json`).
 - Default policies are applied automatically on task creation based on `policies.defaults.task.<type>` unless overridden with `--policy` or explicit validation flags (`--validation-mode`, `--require`, `--threshold`), which emit `policy.override`.
 - Iteration validation uses `policies.defaults.iteration.validation.require`; missing value means no attestation is required.
 

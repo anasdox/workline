@@ -60,6 +60,9 @@ func (e Engine) InitProject(ctx context.Context, projectID, description, actorID
 		p.ID, p.Kind, p.Status, nullable(p.Description), p.CreatedAt); err != nil {
 		return domain.Project{}, fmt.Errorf("insert project: %w", err)
 	}
+	if err := e.Repo.UpsertProjectConfigTx(ctx, tx, p.ID, config.Default(p.ID)); err != nil {
+		return domain.Project{}, fmt.Errorf("insert project config: %w", err)
+	}
 	if err := e.Events.Append(ctx, tx, "project.init", p.ID, "project", p.ID, actorID, events.EventPayload{"status": p.Status}); err != nil {
 		return domain.Project{}, err
 	}
@@ -500,6 +503,12 @@ func (e Engine) TaskDone(ctx context.Context, taskID, workProofJSON, actorID str
 	t, err := e.Repo.GetTask(ctx, taskID)
 	if err != nil {
 		return t, err
+	}
+	if t.Status == "" {
+		t.Status = "planned"
+	}
+	if t.ValidationMode == "" {
+		t.ValidationMode = "none"
 	}
 	tx, err := e.DB.BeginTx(ctx, nil)
 	if err != nil {

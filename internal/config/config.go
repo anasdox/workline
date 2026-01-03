@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,14 +56,7 @@ func Load(workspace string) (*Config, error) {
 		}
 		return nil, err
 	}
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("invalid config yaml: %w", err)
-	}
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+	return FromYAML(data)
 }
 
 // Validate ensures the config meets required structure.
@@ -127,6 +121,36 @@ func Path(workspace string) string {
 // GenerateDefault returns default config YAML.
 func GenerateDefault(projectID string) string {
 	return fmt.Sprintf(defaultTemplate, projectID)
+}
+
+// Default returns the default Config struct for a project.
+func Default(projectID string) *Config {
+	var cfg Config
+	cfg.Project.ID = projectID
+	cfg.Project.Kind = "software-project"
+	_ = yaml.NewDecoder(bytes.NewBufferString(fmt.Sprintf(defaultTemplate, projectID))).Decode(&cfg)
+	return &cfg
+}
+
+// FromYAML parses and validates config from raw YAML bytes.
+func FromYAML(data []byte) (*Config, error) {
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("invalid config yaml: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// FromFile reads YAML config from the given path.
+func FromFile(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return FromYAML(data)
 }
 
 const defaultTemplate = `project:

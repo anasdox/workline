@@ -2,8 +2,6 @@ package engine_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -22,14 +20,6 @@ type testEnv struct {
 func newTestEnv(t *testing.T) testEnv {
 	t.Helper()
 	dir := t.TempDir()
-	cfgContent := config.GenerateDefault("proj-1")
-	cfgPath := config.Path(dir)
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
-		t.Fatalf("mk dir: %v", err)
-	}
-	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
 	conn, err := db.Open(db.Config{Workspace: dir})
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -37,15 +27,15 @@ func newTestEnv(t *testing.T) testEnv {
 	if err := migrate.Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	cfg, err := config.Load(dir)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
+	cfg := config.Default("proj-1")
 	eng := engine.New(conn, cfg)
 	eng.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
 	ctx := context.Background()
 	if _, err := eng.InitProject(ctx, "proj-1", "test", "tester"); err != nil {
 		t.Fatalf("init project: %v", err)
+	}
+	if err := eng.Repo.UpsertProjectConfig(ctx, "proj-1", cfg); err != nil {
+		t.Fatalf("seed config: %v", err)
 	}
 	return testEnv{Engine: eng, Ctx: ctx}
 }

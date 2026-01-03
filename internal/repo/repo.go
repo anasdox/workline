@@ -3,10 +3,13 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"proofline/internal/config"
 	"proofline/internal/domain"
 )
 
@@ -18,9 +21,13 @@ var ErrNotFound = errors.New("not found")
 
 func scanProject(row *sql.Row) (domain.Project, error) {
 	var p domain.Project
-	err := row.Scan(&p.ID, &p.Kind, &p.Status, &p.Description, &p.CreatedAt)
+	var desc sql.NullString
+	err := row.Scan(&p.ID, &p.Kind, &p.Status, &desc, &p.CreatedAt)
 	if err == sql.ErrNoRows {
 		return p, ErrNotFound
+	}
+	if desc.Valid {
+		p.Description = desc.String
 	}
 	return p, err
 }
@@ -32,11 +39,11 @@ func (r Repo) InsertProject(ctx context.Context, p domain.Project) error {
 }
 
 func (r Repo) GetProject(ctx context.Context, id string) (domain.Project, error) {
-	return scanProject(r.DB.QueryRowContext(ctx, `SELECT id,kind,status,description,created_at FROM projects WHERE id=?`, id))
+	return scanProject(r.DB.QueryRowContext(ctx, `SELECT id,kind,status,COALESCE(description,'') AS description,created_at FROM projects WHERE id=?`, id))
 }
 
 func (r Repo) SingleProject(ctx context.Context) (domain.Project, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT id,kind,status,description,created_at FROM projects`)
+	rows, err := r.DB.QueryContext(ctx, `SELECT id,kind,status,COALESCE(description,'') AS description,created_at FROM projects`)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -58,10 +65,117 @@ func (r Repo) SingleProject(ctx context.Context) (domain.Project, error) {
 	return projects[0], nil
 }
 
+func (r Repo) ListProjects(ctx context.Context) ([]domain.Project, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT id,kind,status,COALESCE(description,'') AS description,created_at FROM projects ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []domain.Project
+	for rows.Next() {
+		var p domain.Project
+		if err := rows.Scan(&p.ID, &p.Kind, &p.Status, &p.Description, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		res = append(res, p)
+	}
+	return res, nil
+}
+
 func (r Repo) InsertIteration(ctx context.Context, it domain.Iteration) error {
 	_, err := r.DB.ExecContext(ctx, `INSERT INTO iterations(id,project_id,goal,status,created_at) VALUES (?,?,?,?,?)`,
 		it.ID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
 	return err
+}
+
+func (r Repo) UpdateProject(ctx context.Context, id, status string, description *string) error {
+	var (
+		fields []string
+		args   []any
+	)
+	if status != "" {
+		fields = append(fields, "status=?")
+		args = append(args, status)
+	}
+	if description != nil {
+		fields = append(fields, "description=?")
+		args = append(args, nullable(*description))
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	args = append(args, id)
+	res, err := r.DB.ExecContext(ctx, fmt.Sprintf(`UPDATE projects SET %s WHERE id=?`, strings.Join(fields, ",")), args...)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r Repo) DeleteProject(ctx context.Context, id string) error {
+	res, err := r.DB.ExecContext(ctx, `DELETE FROM projects WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r Repo) UpsertProjectConfig(ctx context.Context, projectID string, cfg *config.Config) error {
+	return upsertProjectConfig(ctx, r.DB, nil, projectID, cfg)
+}
+
+func (r Repo) UpsertProjectConfigTx(ctx context.Context, tx *sql.Tx, projectID string, cfg *config.Config) error {
+	return upsertProjectConfig(ctx, nil, tx, projectID, cfg)
+}
+
+func upsertProjectConfig(ctx context.Context, db *sql.DB, tx *sql.Tx, projectID string, cfg *config.Config) error {
+	if cfg == nil {
+		return fmt.Errorf("config nil")
+	}
+	cfg.Project.ID = projectID
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	exec := func(query string, args ...any) (sql.Result, error) {
+		if tx != nil {
+			return tx.ExecContext(ctx, query, args...)
+		}
+		return db.ExecContext(ctx, query, args...)
+	}
+	_, err = exec(`INSERT INTO project_configs(project_id,config_json,created_at,updated_at) VALUES (?,?,?,?)
+ON CONFLICT(project_id) DO UPDATE SET config_json=excluded.config_json, updated_at=excluded.updated_at`, projectID, string(payload), now, now)
+	return err
+}
+
+func (r Repo) GetProjectConfig(ctx context.Context, projectID string) (*config.Config, error) {
+	var payload string
+	err := r.DB.QueryRowContext(ctx, `SELECT config_json FROM project_configs WHERE project_id=?`, projectID).Scan(&payload)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var cfg config.Config
+	if err := json.Unmarshal([]byte(payload), &cfg); err != nil {
+		return nil, err
+	}
+	if cfg.Project.ID == "" {
+		cfg.Project.ID = projectID
+	}
+	return &cfg, cfg.Validate()
 }
 
 func (r Repo) ListIterations(ctx context.Context, projectID string) ([]domain.Iteration, error) {
@@ -212,10 +326,13 @@ func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, erro
 	var res []domain.Task
 	for rows.Next() {
 		var t domain.Task
-		var iterationID, parentID, assigneeID, workProof, requiredAtt, completedAt sql.NullString
+		var iterationID, parentID, assigneeID, workProof, requiredAtt, completedAt, description sql.NullString
 		var threshold sql.NullInt64
-		if err := rows.Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &t.Description, &t.Status, &assigneeID, &workProof, &t.ValidationMode, &requiredAtt, &threshold, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &workProof, &t.ValidationMode, &requiredAtt, &threshold, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
 			return nil, err
+		}
+		if description.Valid {
+			t.Description = description.String
 		}
 		if iterationID.Valid {
 			t.IterationID = &iterationID.String
@@ -400,9 +517,13 @@ func (r Repo) LatestRunningIteration(ctx context.Context, projectID string) (*do
 	return &it, nil
 }
 
-func (r Repo) LatestEvents(ctx context.Context, limit int, evtType, entityKind, entityID string) ([]domain.Event, error) {
+func (r Repo) LatestEvents(ctx context.Context, limit int, projectID, evtType, entityKind, entityID string) ([]domain.Event, error) {
 	clauses := []string{"1=1"}
 	var args []any
+	if projectID != "" {
+		clauses = append(clauses, "project_id=?")
+		args = append(args, projectID)
+	}
 	if evtType != "" {
 		clauses = append(clauses, "type=?")
 		args = append(args, evtType)

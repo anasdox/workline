@@ -1,0 +1,448 @@
+package repo
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+
+	"proofline/internal/domain"
+)
+
+type Repo struct {
+	DB *sql.DB
+}
+
+var ErrNotFound = errors.New("not found")
+
+func scanProject(row *sql.Row) (domain.Project, error) {
+	var p domain.Project
+	err := row.Scan(&p.ID, &p.Kind, &p.Status, &p.Description, &p.CreatedAt)
+	if err == sql.ErrNoRows {
+		return p, ErrNotFound
+	}
+	return p, err
+}
+
+func (r Repo) InsertProject(ctx context.Context, p domain.Project) error {
+	_, err := r.DB.ExecContext(ctx, `INSERT INTO projects(id,kind,status,description,created_at) VALUES (?,?,?,?,?)`,
+		p.ID, p.Kind, p.Status, nullable(p.Description), p.CreatedAt)
+	return err
+}
+
+func (r Repo) GetProject(ctx context.Context, id string) (domain.Project, error) {
+	return scanProject(r.DB.QueryRowContext(ctx, `SELECT id,kind,status,description,created_at FROM projects WHERE id=?`, id))
+}
+
+func (r Repo) SingleProject(ctx context.Context) (domain.Project, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT id,kind,status,description,created_at FROM projects`)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	defer rows.Close()
+	var projects []domain.Project
+	for rows.Next() {
+		var p domain.Project
+		if err := rows.Scan(&p.ID, &p.Kind, &p.Status, &p.Description, &p.CreatedAt); err != nil {
+			return domain.Project{}, err
+		}
+		projects = append(projects, p)
+	}
+	if len(projects) == 0 {
+		return domain.Project{}, ErrNotFound
+	}
+	if len(projects) > 1 {
+		return domain.Project{}, fmt.Errorf("multiple projects exist; specify --project")
+	}
+	return projects[0], nil
+}
+
+func (r Repo) InsertIteration(ctx context.Context, it domain.Iteration) error {
+	_, err := r.DB.ExecContext(ctx, `INSERT INTO iterations(id,project_id,goal,status,created_at) VALUES (?,?,?,?,?)`,
+		it.ID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
+	return err
+}
+
+func (r Repo) ListIterations(ctx context.Context, projectID string) ([]domain.Iteration, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT id,project_id,goal,status,created_at FROM iterations WHERE project_id=? ORDER BY created_at DESC`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []domain.Iteration
+	for rows.Next() {
+		var it domain.Iteration
+		if err := rows.Scan(&it.ID, &it.ProjectID, &it.Goal, &it.Status, &it.CreatedAt); err != nil {
+			return nil, err
+		}
+		res = append(res, it)
+	}
+	return res, nil
+}
+
+func (r Repo) GetIteration(ctx context.Context, id string) (domain.Iteration, error) {
+	var it domain.Iteration
+	err := r.DB.QueryRowContext(ctx, `SELECT id,project_id,goal,status,created_at FROM iterations WHERE id=?`, id).
+		Scan(&it.ID, &it.ProjectID, &it.Goal, &it.Status, &it.CreatedAt)
+	if err == sql.ErrNoRows {
+		return it, ErrNotFound
+	}
+	return it, err
+}
+
+func (r Repo) UpdateIterationStatus(ctx context.Context, tx *sql.Tx, id, status string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE iterations SET status=? WHERE id=?`, status, id)
+	return err
+}
+
+func nullable(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
+}
+
+func nullableStringPtr(v *string) any {
+	if v == nil {
+		return nil
+	}
+	if *v == "" {
+		return nil
+	}
+	return *v
+}
+
+func (r Repo) InsertTask(ctx context.Context, tx *sql.Tx, t domain.Task) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO tasks(id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_proof_json,validation_mode,required_attestations_json,required_threshold,created_at,updated_at,completed_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.ID, t.ProjectID, nullableStringPtr(t.IterationID), nullableStringPtr(t.ParentID), t.Type, t.Title, nullable(t.Description),
+		t.Status, nullableStringPtr(t.AssigneeID), nullableStringPtr(t.WorkProofJSON), t.ValidationMode, nullableStringPtr(t.RequiredAttestationsJSON),
+		nullableIntPtr(t.RequiredThreshold), t.CreatedAt, t.UpdatedAt, nullableStringPtr(t.CompletedAt))
+	return err
+}
+
+func (r Repo) UpdateTask(ctx context.Context, tx *sql.Tx, t domain.Task) error {
+	_, err := tx.ExecContext(ctx, `UPDATE tasks SET iteration_id=?, parent_id=?, type=?, title=?, description=?, status=?, assignee_id=?, work_proof_json=?, validation_mode=?, required_attestations_json=?, required_threshold=?, updated_at=?, completed_at=? WHERE id=?`,
+		nullableStringPtr(t.IterationID), nullableStringPtr(t.ParentID), t.Type, t.Title, nullable(t.Description), t.Status,
+		nullableStringPtr(t.AssigneeID), nullableStringPtr(t.WorkProofJSON), t.ValidationMode, nullableStringPtr(t.RequiredAttestationsJSON),
+		nullableIntPtr(t.RequiredThreshold), t.UpdatedAt, nullableStringPtr(t.CompletedAt), t.ID)
+	return err
+}
+
+func (r Repo) GetTask(ctx context.Context, id string) (domain.Task, error) {
+	var t domain.Task
+	var iterationID, parentID, assigneeID, workProof, requiredAtt, completedAt sql.NullString
+	var threshold sql.NullInt64
+	err := r.DB.QueryRowContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_proof_json,validation_mode,required_attestations_json,required_threshold,created_at,updated_at,completed_at FROM tasks WHERE id=?`, id).
+		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &t.Description, &t.Status, &assigneeID, &workProof, &t.ValidationMode, &requiredAtt, &threshold, &t.CreatedAt, &t.UpdatedAt, &completedAt)
+	if err == sql.ErrNoRows {
+		return t, ErrNotFound
+	}
+	if iterationID.Valid {
+		t.IterationID = &iterationID.String
+	}
+	if parentID.Valid {
+		t.ParentID = &parentID.String
+	}
+	if assigneeID.Valid {
+		t.AssigneeID = &assigneeID.String
+	}
+	if workProof.Valid {
+		t.WorkProofJSON = &workProof.String
+	}
+	if requiredAtt.Valid {
+		t.RequiredAttestationsJSON = &requiredAtt.String
+	}
+	if threshold.Valid {
+		val := int(threshold.Int64)
+		t.RequiredThreshold = &val
+	}
+	if completedAt.Valid {
+		t.CompletedAt = &completedAt.String
+	}
+	deps, err := r.ListTaskDependencies(ctx, t.ID)
+	if err != nil {
+		return t, err
+	}
+	t.DependsOn = deps
+	return t, err
+}
+
+type TaskFilters struct {
+	ProjectID  string
+	Status     string
+	Iteration  string
+	Parent     string
+	AssigneeID string
+}
+
+func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, error) {
+	var clauses []string
+	var args []any
+	if f.ProjectID != "" {
+		clauses = append(clauses, "project_id=?")
+		args = append(args, f.ProjectID)
+	}
+	if f.Status != "" {
+		clauses = append(clauses, "status=?")
+		args = append(args, f.Status)
+	}
+	if f.Iteration != "" {
+		clauses = append(clauses, "iteration_id=?")
+		args = append(args, f.Iteration)
+	}
+	if f.Parent != "" {
+		clauses = append(clauses, "parent_id=?")
+		args = append(args, f.Parent)
+	}
+	if f.AssigneeID != "" {
+		clauses = append(clauses, "assignee_id=?")
+		args = append(args, f.AssigneeID)
+	}
+	where := ""
+	if len(clauses) > 0 {
+		where = "WHERE " + strings.Join(clauses, " AND ")
+	}
+	rows, err := r.DB.QueryContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_proof_json,validation_mode,required_attestations_json,required_threshold,created_at,updated_at,completed_at FROM tasks `+where+` ORDER BY created_at DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []domain.Task
+	for rows.Next() {
+		var t domain.Task
+		var iterationID, parentID, assigneeID, workProof, requiredAtt, completedAt sql.NullString
+		var threshold sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &t.Description, &t.Status, &assigneeID, &workProof, &t.ValidationMode, &requiredAtt, &threshold, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
+			return nil, err
+		}
+		if iterationID.Valid {
+			t.IterationID = &iterationID.String
+		}
+		if parentID.Valid {
+			t.ParentID = &parentID.String
+		}
+		if assigneeID.Valid {
+			t.AssigneeID = &assigneeID.String
+		}
+		if workProof.Valid {
+			t.WorkProofJSON = &workProof.String
+		}
+		if requiredAtt.Valid {
+			t.RequiredAttestationsJSON = &requiredAtt.String
+		}
+		if threshold.Valid {
+			val := int(threshold.Int64)
+			t.RequiredThreshold = &val
+		}
+		if completedAt.Valid {
+			t.CompletedAt = &completedAt.String
+		}
+		res = append(res, t)
+	}
+	return res, nil
+}
+
+func (r Repo) ListTaskDependencies(ctx context.Context, taskID string) ([]string, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT depends_on_task_id FROM task_deps WHERE task_id=?`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var deps []string
+	for rows.Next() {
+		var dep string
+		if err := rows.Scan(&dep); err != nil {
+			return nil, err
+		}
+		deps = append(deps, dep)
+	}
+	return deps, nil
+}
+
+func (r Repo) AddDependencies(ctx context.Context, tx *sql.Tx, taskID string, deps []string) error {
+	for _, d := range deps {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO task_deps(task_id, depends_on_task_id) VALUES (?,?)`, taskID, d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r Repo) RemoveDependencies(ctx context.Context, tx *sql.Tx, taskID string, deps []string) error {
+	for _, d := range deps {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM task_deps WHERE task_id=? AND depends_on_task_id=?`, taskID, d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r Repo) ListChildren(ctx context.Context, taskID string) ([]string, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT id FROM tasks WHERE parent_id=?`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (r Repo) UpsertLease(ctx context.Context, tx *sql.Tx, lease domain.Lease) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO leases(task_id,owner_id,acquired_at,expires_at) VALUES (?,?,?,?)
+ON CONFLICT(task_id) DO UPDATE SET owner_id=excluded.owner_id, acquired_at=excluded.acquired_at, expires_at=excluded.expires_at`, lease.TaskID, lease.OwnerID, lease.AcquiredAt, lease.ExpiresAt)
+	return err
+}
+
+func (r Repo) DeleteLease(ctx context.Context, tx *sql.Tx, taskID string) error {
+	_, err := tx.ExecContext(ctx, `DELETE FROM leases WHERE task_id=?`, taskID)
+	return err
+}
+
+func (r Repo) GetLease(ctx context.Context, taskID string) (domain.Lease, error) {
+	var l domain.Lease
+	err := r.DB.QueryRowContext(ctx, `SELECT task_id,owner_id,acquired_at,expires_at FROM leases WHERE task_id=?`, taskID).
+		Scan(&l.TaskID, &l.OwnerID, &l.AcquiredAt, &l.ExpiresAt)
+	if err == sql.ErrNoRows {
+		return l, ErrNotFound
+	}
+	return l, err
+}
+
+func (r Repo) InsertAttestation(ctx context.Context, att domain.Attestation) error {
+	_, err := r.DB.ExecContext(ctx, `INSERT INTO attestations(id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json) VALUES (?,?,?,?,?,?,?,?)`,
+		att.ID, att.ProjectID, att.EntityKind, att.EntityID, att.Kind, att.ActorID, att.TS, nullable(att.PayloadJSON))
+	return err
+}
+
+type AttestationFilters struct {
+	EntityKind string
+	EntityID   string
+	Kind       string
+	ProjectID  string
+}
+
+func (r Repo) ListAttestations(ctx context.Context, f AttestationFilters) ([]domain.Attestation, error) {
+	var clauses []string
+	var args []any
+	if f.ProjectID != "" {
+		clauses = append(clauses, "project_id=?")
+		args = append(args, f.ProjectID)
+	}
+	if f.EntityKind != "" {
+		clauses = append(clauses, "entity_kind=?")
+		args = append(args, f.EntityKind)
+	}
+	if f.EntityID != "" {
+		clauses = append(clauses, "entity_id=?")
+		args = append(args, f.EntityID)
+	}
+	if f.Kind != "" {
+		clauses = append(clauses, "kind=?")
+		args = append(args, f.Kind)
+	}
+	where := ""
+	if len(clauses) > 0 {
+		where = "WHERE " + strings.Join(clauses, " AND ")
+	}
+	rows, err := r.DB.QueryContext(ctx, `SELECT id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json FROM attestations `+where+` ORDER BY ts DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []domain.Attestation
+	for rows.Next() {
+		var a domain.Attestation
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.EntityKind, &a.EntityID, &a.Kind, &a.ActorID, &a.TS, &a.PayloadJSON); err != nil {
+			return nil, err
+		}
+		res = append(res, a)
+	}
+	return res, nil
+}
+
+func (r Repo) CountTasksByStatus(ctx context.Context, projectID string) (map[string]int, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT status, count(*) FROM tasks WHERE project_id=? GROUP BY status`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	res := map[string]int{}
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		res[status] = count
+	}
+	return res, nil
+}
+
+func (r Repo) LatestRunningIteration(ctx context.Context, projectID string) (*domain.Iteration, error) {
+	row := r.DB.QueryRowContext(ctx, `SELECT id,project_id,goal,status,created_at FROM iterations WHERE project_id=? AND status='running' ORDER BY created_at DESC LIMIT 1`, projectID)
+	var it domain.Iteration
+	err := row.Scan(&it.ID, &it.ProjectID, &it.Goal, &it.Status, &it.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &it, nil
+}
+
+func (r Repo) LatestEvents(ctx context.Context, limit int, evtType, entityKind, entityID string) ([]domain.Event, error) {
+	clauses := []string{"1=1"}
+	var args []any
+	if evtType != "" {
+		clauses = append(clauses, "type=?")
+		args = append(args, evtType)
+	}
+	if entityKind != "" {
+		clauses = append(clauses, "entity_kind=?")
+		args = append(args, entityKind)
+	}
+	if entityID != "" {
+		clauses = append(clauses, "entity_id=?")
+		args = append(args, entityID)
+	}
+	where := "WHERE " + strings.Join(clauses, " AND ")
+	query := fmt.Sprintf(`SELECT id,ts,type,project_id,entity_kind,entity_id,actor_id,payload_json FROM events %s ORDER BY id DESC LIMIT ?`, where)
+	args = append(args, limit)
+	rows, err := r.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []domain.Event
+	for rows.Next() {
+		var e domain.Event
+		if err := rows.Scan(&e.ID, &e.TS, &e.Type, &e.ProjectID, &e.EntityKind, &e.EntityID, &e.ActorID, &e.Payload); err != nil {
+			return nil, err
+		}
+		res = append(res, e)
+	}
+	return res, nil
+}
+
+func nullableIntPtr(v *int) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+func (r Repo) InsertDecision(ctx context.Context, d domain.Decision) error {
+	_, err := r.DB.ExecContext(ctx, `INSERT INTO decisions(id,project_id,title,context_json,decision,rationale_json,alternatives_json,decider_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+		d.ID, d.ProjectID, d.Title, nullable(d.ContextJSON), d.Decision, nullable(d.RationaleJSON), nullable(d.AlternativesJSON), d.DeciderID, d.CreatedAt)
+	return err
+}

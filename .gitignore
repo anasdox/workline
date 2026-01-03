@@ -1,0 +1,14 @@
+# Binaries
+pl
+
+# Build caches
+.gocache/
+.gomodcache/
+
+# Workspace data
+.proofline/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/

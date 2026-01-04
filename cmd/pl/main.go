@@ -521,8 +521,17 @@ func taskUpdateCmd() *cobra.Command {
 			opts.SetWorkProof = optionalString(workProof)
 			opts.Assign = optionalString(assign)
 			opts.PolicyPreset = setPolicy
+			opts.AssignProvided = cmd.Flags().Changed("assign")
+			opts.ParentProvided = cmd.Flags().Changed("set-parent")
+			opts.WorkProofSet = cmd.Flags().Changed("set-work-proof-json")
+			opts.ValidationModeSet = cmd.Flags().Changed("validation-mode")
+			opts.RequiredKindsSet = cmd.Flags().Changed("require")
+			if opts.WorkProofSet && opts.SetWorkProof == nil {
+				opts.ClearWorkProof = true
+			}
 			if cmd.Flags().Changed("threshold") {
 				opts.Threshold = &threshold
+				opts.ThresholdSet = true
 			}
 			if cmd.Flags().Changed("validation-mode") || cmd.Flags().Changed("require") || cmd.Flags().Changed("threshold") {
 				opts.PolicyOverride = true

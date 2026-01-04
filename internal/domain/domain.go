@@ -5,15 +5,15 @@ type Project struct {
 	Kind        string `json:"kind"`
 	Status      string `json:"status"`
 	Description string `json:"description,omitempty"`
-	CreatedAt   string `json:"created_at"`
+	CreatedAt   string `json:"created_at" format:"date-time"`
 }
 
 type Iteration struct {
 	ID        string `json:"id"`
 	ProjectID string `json:"project_id"`
 	Goal      string `json:"goal"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
+	Status    string `json:"status" enum:"pending,running,delivered,validated,rejected"`
+	CreatedAt string `json:"created_at" format:"date-time"`
 }
 
 type Task struct {
@@ -21,19 +21,19 @@ type Task struct {
 	ProjectID                string   `json:"project_id"`
 	IterationID              *string  `json:"iteration_id,omitempty"`
 	ParentID                 *string  `json:"parent_id,omitempty"`
-	Type                     string   `json:"type"`
+	Type                     string   `json:"type" enum:"technical,feature,bug,docs,chore"`
 	Title                    string   `json:"title"`
 	Description              string   `json:"description,omitempty"`
-	Status                   string   `json:"status"`
+	Status                   string   `json:"status" enum:"planned,in_progress,review,done,rejected,canceled"`
 	AssigneeID               *string  `json:"assignee_id,omitempty"`
 	WorkProofJSON            *string  `json:"work_proof_json,omitempty"`
-	ValidationMode           string   `json:"validation_mode"`
+	ValidationMode           string   `json:"validation_mode" enum:"none,all,any,threshold"`
 	RequiredAttestationsJSON *string  `json:"required_attestations_json,omitempty"`
 	RequiredThreshold        *int     `json:"required_threshold,omitempty"`
 	DependsOn                []string `json:"depends_on,omitempty"`
-	CreatedAt                string   `json:"created_at"`
-	UpdatedAt                string   `json:"updated_at"`
-	CompletedAt              *string  `json:"completed_at,omitempty"`
+	CreatedAt                string   `json:"created_at" format:"date-time"`
+	UpdatedAt                string   `json:"updated_at" format:"date-time"`
+	CompletedAt              *string  `json:"completed_at,omitempty" format:"date-time"`
 }
 
 type Decision struct {
@@ -51,8 +51,8 @@ type Decision struct {
 type Lease struct {
 	TaskID     string `json:"task_id"`
 	OwnerID    string `json:"owner_id"`
-	AcquiredAt string `json:"acquired_at"`
-	ExpiresAt  string `json:"expires_at"`
+	AcquiredAt string `json:"acquired_at" format:"date-time"`
+	ExpiresAt  string `json:"expires_at" format:"date-time"`
 }
 
 type Attestation struct {
@@ -62,13 +62,13 @@ type Attestation struct {
 	EntityID    string `json:"entity_id"`
 	Kind        string `json:"kind"`
 	ActorID     string `json:"actor_id"`
-	TS          string `json:"ts"`
+	TS          string `json:"ts" format:"date-time"`
 	PayloadJSON string `json:"payload_json,omitempty"`
 }
 
 type Event struct {
 	ID         int64  `json:"id"`
-	TS         string `json:"ts"`
+	TS         string `json:"ts" format:"date-time"`
 	Type       string `json:"type"`
 	ProjectID  string `json:"project_id,omitempty"`
 	EntityKind string `json:"entity_kind"`

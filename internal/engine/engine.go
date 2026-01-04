@@ -83,6 +83,7 @@ type TaskCreateOptions struct {
 	Description       string
 	DependsOn         []string
 	AssigneeID        string
+	WorkProofJSON     *string
 	PolicyPreset      string
 	ValidationMode    string
 	RequiredKinds     []string
@@ -137,10 +138,7 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 	if id == "" {
 		id = uuid.NewSHA1(uuid.NameSpaceOID, []byte(opts.ProjectID+"|"+opts.Title+"|"+now)).String()
 	}
-	reqJSON, err := marshalStringSlice(opts.RequiredKinds)
-	if err != nil {
-		return domain.Task{}, err
-	}
+	var reqJSON *string
 	presetName := opts.PolicyPreset
 	manualPolicy := opts.PolicyOverride
 	if !manualPolicy {
@@ -166,8 +164,17 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 			}
 		}
 	}
+	reqJSON, err = marshalStringSlice(opts.RequiredKinds)
+	if err != nil {
+		return domain.Task{}, err
+	}
 	if opts.ValidationMode == "" {
 		opts.ValidationMode = "none"
+	}
+	if opts.WorkProofJSON != nil {
+		if err := validateJSON(*opts.WorkProofJSON); err != nil {
+			return domain.Task{}, fmt.Errorf("work-proof-json: %w", err)
+		}
 	}
 	t := domain.Task{
 		ID:                       id,
@@ -179,6 +186,7 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 		Description:              opts.Description,
 		Status:                   "planned",
 		AssigneeID:               optionalString(opts.AssigneeID),
+		WorkProofJSON:            opts.WorkProofJSON,
 		ValidationMode:           opts.ValidationMode,
 		RequiredAttestationsJSON: reqJSON,
 		RequiredThreshold:        optionalInt(opts.RequiredThreshold),
@@ -260,20 +268,27 @@ func (e Engine) ensureNoCycle(ctx context.Context, parentID, childID string) err
 
 // TaskUpdateOptions encapsulates allowed updates.
 type TaskUpdateOptions struct {
-	ID             string
-	Status         string
-	Assign         *string
-	AddDeps        []string
-	RemoveDeps     []string
-	SetParent      *string
-	SetWorkProof   *string
-	PolicyPreset   string
-	ValidationMode string
-	RequiredKinds  []string
-	Threshold      *int
-	ActorID        string
-	Force          bool
-	PolicyOverride bool
+	ID                string
+	Status            string
+	Assign            *string
+	AssignProvided    bool
+	AddDeps           []string
+	RemoveDeps        []string
+	SetParent         *string
+	ParentProvided    bool
+	SetWorkProof      *string
+	WorkProofSet      bool
+	ClearWorkProof    bool
+	PolicyPreset      string
+	ValidationMode    string
+	ValidationModeSet bool
+	RequiredKinds     []string
+	RequiredKindsSet  bool
+	Threshold         *int
+	ThresholdSet      bool
+	ActorID           string
+	Force             bool
+	PolicyOverride    bool
 }
 
 func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.Task, error) {
@@ -292,8 +307,8 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 	}
 	defer tx.Rollback()
 
-	if opts.SetParent != nil {
-		if *opts.SetParent == "" {
+	if opts.ParentProvided {
+		if opts.SetParent == nil || (opts.SetParent != nil && *opts.SetParent == "") {
 			t.ParentID = nil
 		} else {
 			if err := e.ensureNoCycle(ctx, *opts.SetParent, t.ID); err != nil {
@@ -303,8 +318,8 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 		}
 	}
 
-	if opts.Assign != nil {
-		if *opts.Assign == "" {
+	if opts.AssignProvided {
+		if opts.Assign == nil || (opts.Assign != nil && *opts.Assign == "") {
 			t.AssigneeID = nil
 		} else {
 			t.AssigneeID = opts.Assign
@@ -313,14 +328,23 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 	if t.ValidationMode == "" {
 		t.ValidationMode = "none"
 	}
-	if opts.SetWorkProof != nil {
-		if err := validateJSON(*opts.SetWorkProof); err != nil {
-			return t, fmt.Errorf("work proof JSON: %w", err)
-		}
-		t.WorkProofJSON = opts.SetWorkProof
-		if !opts.Force {
-			if err := e.requireLeaseOrForce(ctx, tx, t.ID, opts.ActorID, opts.Force); err != nil {
-				return t, err
+	if opts.WorkProofSet {
+		if opts.ClearWorkProof {
+			if !opts.Force {
+				if err := e.requireLeaseOrForce(ctx, tx, t.ID, opts.ActorID, opts.Force); err != nil {
+					return t, err
+				}
+			}
+			t.WorkProofJSON = nil
+		} else if opts.SetWorkProof != nil {
+			if err := validateJSON(*opts.SetWorkProof); err != nil {
+				return t, fmt.Errorf("work proof JSON: %w", err)
+			}
+			t.WorkProofJSON = opts.SetWorkProof
+			if !opts.Force {
+				if err := e.requireLeaseOrForce(ctx, tx, t.ID, opts.ActorID, opts.Force); err != nil {
+					return t, err
+				}
 			}
 		}
 	}
@@ -337,20 +361,24 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 		t.RequiredAttestationsJSON = reqJSON
 		t.RequiredThreshold = preset.Threshold
 	}
-	if opts.ValidationMode != "" {
-		t.ValidationMode = opts.ValidationMode
+	if opts.ValidationModeSet {
+		if opts.ValidationMode == "" {
+			t.ValidationMode = "none"
+		} else {
+			t.ValidationMode = opts.ValidationMode
+		}
 	}
-	if len(opts.RequiredKinds) > 0 || opts.PolicyOverride {
+	if opts.RequiredKindsSet || opts.PolicyOverride {
 		reqJSON, err := marshalStringSlice(opts.RequiredKinds)
 		if err != nil {
 			return t, err
 		}
 		t.RequiredAttestationsJSON = reqJSON
-		if opts.ValidationMode == "" && t.ValidationMode == "" {
+		if !opts.ValidationModeSet && t.ValidationMode == "" {
 			t.ValidationMode = "none"
 		}
 	}
-	if opts.Threshold != nil {
+	if opts.ThresholdSet {
 		t.RequiredThreshold = opts.Threshold
 	}
 	if opts.Status != "" && opts.Status != t.Status {
@@ -399,7 +427,7 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 		return t, err
 	}
 	newPolicy := currentPolicy(t)
-	overrideEvent := opts.PolicyOverride || ((opts.ValidationMode != "" || len(opts.RequiredKinds) > 0 || opts.Threshold != nil) && opts.PolicyPreset == "")
+	overrideEvent := opts.PolicyOverride || ((opts.ValidationModeSet || opts.RequiredKindsSet || opts.ThresholdSet) && opts.PolicyPreset == "")
 	if opts.PolicyPreset != "" {
 		if err := e.Events.Append(ctx, tx, "task.policy.updated", t.ProjectID, "task", t.ID, opts.ActorID, events.EventPayload{
 			"preset_name":   opts.PolicyPreset,
@@ -443,11 +471,11 @@ func ensureTaskTransition(oldStatus, newStatus string, force bool) error {
 	}
 	switch oldStatus {
 	case "planned":
-		if newStatus == "in_progress" || newStatus == "canceled" {
+		if newStatus == "in_progress" || newStatus == "canceled" || newStatus == "review" || newStatus == "done" {
 			return nil
 		}
 	case "in_progress":
-		if newStatus == "rejected" || newStatus == "canceled" || newStatus == "review" {
+		if newStatus == "rejected" || newStatus == "canceled" || newStatus == "review" || newStatus == "done" {
 			return nil
 		}
 	case "review":
@@ -534,7 +562,7 @@ func (e Engine) TaskDone(ctx context.Context, taskID, workProofJSON, actorID str
 			return t, err
 		}
 		if !satisfied {
-			targetStatus = "review"
+			return t, errors.New("validation policy not satisfied")
 		}
 	}
 	if err := ensureTaskTransition(t.Status, targetStatus, force); err != nil {

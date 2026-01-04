@@ -13,7 +13,6 @@ import (
 
 	"proofline/internal/config"
 	"proofline/internal/db"
-	"proofline/internal/domain"
 	"proofline/internal/engine"
 	"proofline/internal/migrate"
 )
@@ -90,6 +89,12 @@ func doJSON(t *testing.T, client *http.Client, method, url string, body any, hea
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	if _, ok := headers["X-Actor-Id"]; !ok && method != http.MethodGet {
+		headers["X-Actor-Id"] = "tester"
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -115,10 +120,10 @@ func TestTaskDoneWithAttestations(t *testing.T) {
 		"title": "Ship feature",
 		"type":  "feature",
 	}, nil)
-	if createRes.StatusCode != http.StatusOK {
+	if createRes.StatusCode != http.StatusCreated {
 		t.Fatalf("create task status %d: %s", createRes.StatusCode, string(data))
 	}
-	var created domain.Task
+	var created TaskResponse
 	if err := json.Unmarshal(data, &created); err != nil {
 		t.Fatalf("unmarshal task: %v", err)
 	}
@@ -130,7 +135,7 @@ func TestTaskDoneWithAttestations(t *testing.T) {
 			"entity_id":   taskID,
 			"kind":        kind,
 		}, nil)
-		if res.StatusCode != http.StatusOK {
+		if res.StatusCode != http.StatusCreated {
 			t.Fatalf("attestation %s status %d: %s", kind, res.StatusCode, string(body))
 		}
 	}
@@ -144,7 +149,7 @@ func TestTaskDoneWithAttestations(t *testing.T) {
 	if taskRes.StatusCode != http.StatusOK {
 		t.Fatalf("get task status %d: %s", taskRes.StatusCode, string(taskBody))
 	}
-	var fetched domain.Task
+	var fetched TaskResponse
 	_ = json.Unmarshal(taskBody, &fetched)
 
 	doneRes, doneBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+taskID+"/done?force=true", map[string]any{
@@ -153,7 +158,7 @@ func TestTaskDoneWithAttestations(t *testing.T) {
 	if doneRes.StatusCode != http.StatusOK {
 		t.Fatalf("done status %d: %s", doneRes.StatusCode, string(doneBody))
 	}
-	var done domain.Task
+	var done TaskResponse
 	if err := json.Unmarshal(doneBody, &done); err != nil {
 		t.Fatalf("unmarshal done: %v", err)
 	}
@@ -171,10 +176,10 @@ func TestLeaseConflict(t *testing.T) {
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Lease me",
 	}, nil)
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode != http.StatusCreated {
 		t.Fatalf("create task: %d %s", res.StatusCode, string(data))
 	}
-	var created domain.Task
+	var created TaskResponse
 	_ = json.Unmarshal(data, &created)
 
 	claim1, body1 := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+created.ID+"/claim", nil, nil)
@@ -197,7 +202,7 @@ func TestIterationValidationBlocked(t *testing.T) {
 		"id":   "iter-1",
 		"goal": "Test iteration",
 	}, nil)
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode != http.StatusCreated {
 		t.Fatalf("create iteration: %d %s", res.StatusCode, string(data))
 	}
 
@@ -220,5 +225,155 @@ func TestIterationValidationBlocked(t *testing.T) {
 	}, nil)
 	if valRes.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("expected validation block (422), got %d %s", valRes.StatusCode, string(valBody))
+	}
+}
+
+func TestCreateTaskValidation(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{}, nil)
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", res.StatusCode, string(data))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(data, &apiErr)
+	if apiErr.Error.Code != "bad_request" {
+		t.Fatalf("unexpected error code: %s", apiErr.Error.Code)
+	}
+}
+
+func TestDoneTaskRequiresValidation(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Needs validation",
+		"type":  "feature",
+	}, nil)
+	if createRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", createRes.StatusCode, string(data))
+	}
+	var task TaskResponse
+	_ = json.Unmarshal(data, &task)
+
+	claimRes, claimBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/claim", nil, nil)
+	if claimRes.StatusCode != http.StatusOK {
+		t.Fatalf("claim lease: %d %s", claimRes.StatusCode, string(claimBody))
+	}
+
+	doneRes, doneBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/done", map[string]any{
+		"work_proof": map[string]any{"note": "testing"},
+	}, nil)
+	if doneRes.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", doneRes.StatusCode, string(doneBody))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(doneBody, &apiErr)
+	if apiErr.Error.Code != "validation_failed" {
+		t.Fatalf("unexpected error code: %s", apiErr.Error.Code)
+	}
+}
+
+func TestConfigEndpoint(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/config", nil, nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("config status %d: %s", res.StatusCode, string(data))
+	}
+	var cfg ProjectConfigResponse
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if len(cfg.Policies.Presets) == 0 || cfg.Policies.Defaults.Task["feature"] == "" {
+		t.Fatalf("config missing presets/defaults: %+v", cfg)
+	}
+}
+
+func TestValidationEndpoint(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Validate me",
+		"type":  "feature",
+		"validation": map[string]any{
+			"mode":    "all",
+			"require": []string{"ci.passed", "review.approved"},
+		},
+	}, nil)
+	if createRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", createRes.StatusCode, string(data))
+	}
+	var task TaskResponse
+	_ = json.Unmarshal(data, &task)
+
+	attRes, attBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/attestations", map[string]any{
+		"entity_kind": "task",
+		"entity_id":   task.ID,
+		"kind":        "ci.passed",
+	}, nil)
+	if attRes.StatusCode != http.StatusCreated {
+		t.Fatalf("attestation status %d: %s", attRes.StatusCode, string(attBody))
+	}
+
+	valRes, valBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/validation", nil, nil)
+	if valRes.StatusCode != http.StatusOK {
+		t.Fatalf("validation status %d: %s", valRes.StatusCode, string(valBody))
+	}
+	var status ValidationStatusResponse
+	if err := json.Unmarshal(valBody, &status); err != nil {
+		t.Fatalf("unmarshal validation: %v", err)
+	}
+	if status.Satisfied {
+		t.Fatalf("expected validation to be unsatisfied")
+	}
+	if len(status.Present) != 1 || len(status.Missing) != 1 {
+		t.Fatalf("unexpected present/missing: %+v", status)
+	}
+}
+
+func TestPaginationProvidesCursor(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	for i := 0; i < 3; i++ {
+		res, body := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+			"title": fmt.Sprintf("Task %d", i),
+		}, nil)
+		if res.StatusCode != http.StatusCreated {
+			t.Fatalf("create task %d: %d %s", i, res.StatusCode, string(body))
+		}
+	}
+
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/tasks?limit=1", nil, nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("list tasks: %d %s", res.StatusCode, string(data))
+	}
+	var page paginatedTasks
+	if err := json.Unmarshal(data, &page); err != nil {
+		t.Fatalf("unmarshal page: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(page.Items))
+	}
+	if page.NextCursor == "" {
+		t.Fatalf("expected next_cursor to be set")
 	}
 }

@@ -23,17 +23,20 @@ class Attestation:
     entity_id: str
     kind: str
     actor_id: str
+    ts: Optional[str] = None
+    payload: Any = None
 
 
 @dataclass
 class Event:
     id: int
+    ts: Optional[str]
     type: str
     project_id: str
     entity_kind: str
     entity_id: str
     actor_id: str
-    payload: str
+    payload: Any = None
 
 
 class APIError(RuntimeError):
@@ -78,7 +81,13 @@ class ProoflineClient:
     def create_task(self, title: str, task_type: str = "feature") -> Task:
         url = self._project_path("tasks")
         data = self._request("POST", url, {"title": title, "type": task_type})
-        return Task(**data)
+        return Task(
+            id=data["id"],
+            project_id=data["project_id"],
+            title=data["title"],
+            type=data["type"],
+            status=data["status"],
+        )
 
     def add_attestation(self, entity_kind: str, entity_id: str, kind: str, payload: Any = None) -> Attestation:
         url = self._project_path("attestations")
@@ -86,9 +95,31 @@ class ProoflineClient:
         if payload is not None:
             body["payload"] = payload
         data = self._request("POST", url, body)
-        return Attestation(**data)
+        return Attestation(
+            id=data["id"],
+            project_id=data["project_id"],
+            entity_kind=data["entity_kind"],
+            entity_id=data["entity_id"],
+            kind=data["kind"],
+            actor_id=data["actor_id"],
+            ts=data.get("ts"),
+            payload=data.get("payload"),
+        )
 
     def events(self, limit: int = 20) -> List[Event]:
         url = self._project_path(f"events?limit={limit}")
         data = self._request("GET", url)
-        return [Event(**item) for item in data]
+        items = data.get("items", data)
+        return [
+            Event(
+                id=item["id"],
+                ts=item.get("ts"),
+                type=item["type"],
+                project_id=item.get("project_id"),
+                entity_kind=item.get("entity_kind"),
+                entity_id=item.get("entity_id"),
+                actor_id=item.get("actor_id"),
+                payload=item.get("payload"),
+            )
+            for item in items
+        ]

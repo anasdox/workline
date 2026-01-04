@@ -179,7 +179,23 @@ func (r Repo) GetProjectConfig(ctx context.Context, projectID string) (*config.C
 }
 
 func (r Repo) ListIterations(ctx context.Context, projectID string) ([]domain.Iteration, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT id,project_id,goal,status,created_at FROM iterations WHERE project_id=? ORDER BY created_at DESC`, projectID)
+	return r.ListIterationsWithCursor(ctx, projectID, 0, "", "")
+}
+
+func (r Repo) ListIterationsWithCursor(ctx context.Context, projectID string, limit int, cursorCreatedAt, cursorID string) ([]domain.Iteration, error) {
+	clauses := []string{"project_id=?"}
+	args := []any{projectID}
+	if cursorCreatedAt != "" && cursorID != "" {
+		clauses = append(clauses, "(created_at < ? OR (created_at = ? AND id < ?))")
+		args = append(args, cursorCreatedAt, cursorCreatedAt, cursorID)
+	}
+	where := "WHERE " + strings.Join(clauses, " AND ")
+	query := `SELECT id,project_id,goal,status,created_at FROM iterations ` + where + ` ORDER BY created_at DESC, id DESC`
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -284,11 +300,14 @@ func (r Repo) GetTask(ctx context.Context, id string) (domain.Task, error) {
 }
 
 type TaskFilters struct {
-	ProjectID  string
-	Status     string
-	Iteration  string
-	Parent     string
-	AssigneeID string
+	ProjectID       string
+	Status          string
+	Iteration       string
+	Parent          string
+	AssigneeID      string
+	Limit           int
+	CursorCreatedAt string
+	CursorID        string
 }
 
 func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, error) {
@@ -314,11 +333,20 @@ func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, erro
 		clauses = append(clauses, "assignee_id=?")
 		args = append(args, f.AssigneeID)
 	}
+	if f.CursorCreatedAt != "" && f.CursorID != "" {
+		clauses = append(clauses, "(created_at < ? OR (created_at = ? AND id < ?))")
+		args = append(args, f.CursorCreatedAt, f.CursorCreatedAt, f.CursorID)
+	}
 	where := ""
 	if len(clauses) > 0 {
 		where = "WHERE " + strings.Join(clauses, " AND ")
 	}
-	rows, err := r.DB.QueryContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_proof_json,validation_mode,required_attestations_json,required_threshold,created_at,updated_at,completed_at FROM tasks `+where+` ORDER BY created_at DESC`, args...)
+	query := `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_proof_json,validation_mode,required_attestations_json,required_threshold,created_at,updated_at,completed_at FROM tasks ` + where + ` ORDER BY created_at DESC, id DESC`
+	if f.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, f.Limit)
+	}
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -445,6 +473,9 @@ type AttestationFilters struct {
 	EntityID   string
 	Kind       string
 	ProjectID  string
+	Limit      int
+	CursorTS   string
+	CursorID   string
 }
 
 func (r Repo) ListAttestations(ctx context.Context, f AttestationFilters) ([]domain.Attestation, error) {
@@ -466,11 +497,20 @@ func (r Repo) ListAttestations(ctx context.Context, f AttestationFilters) ([]dom
 		clauses = append(clauses, "kind=?")
 		args = append(args, f.Kind)
 	}
+	if f.CursorTS != "" && f.CursorID != "" {
+		clauses = append(clauses, "(ts < ? OR (ts = ? AND id < ?))")
+		args = append(args, f.CursorTS, f.CursorTS, f.CursorID)
+	}
 	where := ""
 	if len(clauses) > 0 {
 		where = "WHERE " + strings.Join(clauses, " AND ")
 	}
-	rows, err := r.DB.QueryContext(ctx, `SELECT id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json FROM attestations `+where+` ORDER BY ts DESC`, args...)
+	query := `SELECT id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json FROM attestations ` + where + ` ORDER BY ts DESC, id DESC`
+	if f.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, f.Limit)
+	}
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -518,6 +558,10 @@ func (r Repo) LatestRunningIteration(ctx context.Context, projectID string) (*do
 }
 
 func (r Repo) LatestEvents(ctx context.Context, limit int, projectID, evtType, entityKind, entityID string) ([]domain.Event, error) {
+	return r.LatestEventsFrom(ctx, limit, 0, projectID, evtType, entityKind, entityID)
+}
+
+func (r Repo) LatestEventsFrom(ctx context.Context, limit int, cursor int64, projectID, evtType, entityKind, entityID string) ([]domain.Event, error) {
 	clauses := []string{"1=1"}
 	var args []any
 	if projectID != "" {
@@ -535,6 +579,10 @@ func (r Repo) LatestEvents(ctx context.Context, limit int, projectID, evtType, e
 	if entityID != "" {
 		clauses = append(clauses, "entity_id=?")
 		args = append(args, entityID)
+	}
+	if cursor > 0 {
+		clauses = append(clauses, "id<?")
+		args = append(args, cursor)
 	}
 	where := "WHERE " + strings.Join(clauses, " AND ")
 	query := fmt.Sprintf(`SELECT id,ts,type,project_id,entity_kind,entity_id,actor_id,payload_json FROM events %s ORDER BY id DESC LIMIT ?`, where)

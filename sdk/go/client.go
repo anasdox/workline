@@ -42,21 +42,25 @@ type Task struct {
 
 // Attestation represents a proof entry.
 type Attestation struct {
-	ID         string `json:"id"`
-	ProjectID  string `json:"project_id"`
-	EntityKind string `json:"entity_kind"`
-	EntityID   string `json:"entity_id"`
-	Kind       string `json:"kind"`
-	ActorID    string `json:"actor_id"`
+	ID         string         `json:"id"`
+	ProjectID  string         `json:"project_id"`
+	EntityKind string         `json:"entity_kind"`
+	EntityID   string         `json:"entity_id"`
+	Kind       string         `json:"kind"`
+	ActorID    string         `json:"actor_id"`
+	Payload    map[string]any `json:"payload,omitempty"`
+	TS         string         `json:"ts"`
 }
 
 // Event represents a log entry.
 type Event struct {
-	ID         int    `json:"id"`
-	Type       string `json:"type"`
-	ProjectID  string `json:"project_id"`
-	EntityID   string `json:"entity_id"`
-	EntityKind string `json:"entity_kind"`
+	ID         int64          `json:"id"`
+	TS         string         `json:"ts"`
+	Type       string         `json:"type"`
+	ProjectID  string         `json:"project_id"`
+	EntityID   string         `json:"entity_id"`
+	EntityKind string         `json:"entity_kind"`
+	Payload    map[string]any `json:"payload"`
 }
 
 // APIError wraps non-2xx responses.
@@ -67,6 +71,12 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("api error: status=%d body=%s", e.StatusCode, e.Body)
+}
+
+// PaginatedEvents wraps list responses with cursors.
+type PaginatedEvents struct {
+	Items      []Event `json:"items"`
+	NextCursor string  `json:"next_cursor"`
 }
 
 // CreateTask creates a task.
@@ -95,11 +105,24 @@ func (c *Client) AddAttestation(ctx context.Context, entityKind, entityID, kind 
 
 // Events returns recent events.
 func (c *Client) Events(ctx context.Context, limit int) ([]Event, error) {
+	page, err := c.EventsPage(ctx, limit, "")
+	return page.Items, err
+}
+
+// EventsPage returns a paginated event listing.
+func (c *Client) EventsPage(ctx context.Context, limit int, cursor string) (PaginatedEvents, error) {
 	endpoint := c.projectPath("events")
 	if limit > 0 {
 		endpoint = fmt.Sprintf("%s?limit=%d", endpoint, limit)
 	}
-	var resp []Event
+	if cursor != "" {
+		sep := "?"
+		if strings.Contains(endpoint, "?") {
+			sep = "&"
+		}
+		endpoint = fmt.Sprintf("%s%scursor=%s", endpoint, sep, url.QueryEscape(cursor))
+	}
+	var resp PaginatedEvents
 	err := c.do(ctx, http.MethodGet, endpoint, nil, &resp)
 	return resp, err
 }

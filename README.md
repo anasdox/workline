@@ -1,6 +1,12 @@
 Proofline CLI (`pl`)
 ====================
 
+Why Proofline?
+--------------
+LLM agents that manage projects through text alone easily lose structure and context; Proofline gives them a typed API for tasks, iterations, attestations, and policies so they can read/write state safely instead of scraping checklists.
+Too often, “done” is just a checkbox: tasks get marked complete without proof, policies are tribal knowledge, and quality gates are easy to forget. Proofline makes “done” and “ready” explicit by attaching attestations (proof) and enforcing policies automatically. It keeps evidence, rules, and history in one place so teams—and agents—ship with confidence instead of guesswork.
+
+
 Proofline stores all state in SQLite at `.proofline/proofline.db`. Project configs (attestations + policies) live in the DB; you can import from `.proofline/proofline.yml` if you want to override defaults.
 
 Core Concepts (explained simply)

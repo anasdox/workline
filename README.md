@@ -81,7 +81,7 @@ HTTP API
 - Start server: `pl serve --addr 127.0.0.1:8080 --base-path /v0`.
 - Base paths are project-scoped: `/v0/projects/{project_id}/tasks`, `/iterations`, `/attestations`, `/events`, `/status`. Projects: `POST/GET /v0/projects`, `GET/PATCH/DELETE /v0/projects/{project_id}`.
 - OpenAPI spec: `http://127.0.0.1:8080/openapi.json`; Swagger UI: `http://127.0.0.1:8080/docs` (loads the generated spec, no static file).
-- Actor header: send `X-Actor-Id` (defaults to `local-user` if omitted).
+- Authentication: use `Authorization: Bearer <JWT>` for humans or `X-Api-Key` for automation. `X-Actor-Id` is deprecated and ignored when auth headers are present (only honored if `ALLOW_LEGACY_ACTOR_HEADER=true`).
 - Auth: none for v0; intended for local/agent use. Add auth before exposing beyond localhost.
 
 SDKs

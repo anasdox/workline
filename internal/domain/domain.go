@@ -76,3 +76,11 @@ type Event struct {
 	ActorID    string `json:"actor_id"`
 	Payload    string `json:"payload_json"`
 }
+
+type APIKey struct {
+	ID        string `json:"id"`
+	ActorID   string `json:"actor_id"`
+	Name      string `json:"name,omitempty"`
+	KeyHash   string `json:"key_hash"`
+	CreatedAt string `json:"created_at" format:"date-time"`
+}

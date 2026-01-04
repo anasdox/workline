@@ -1,1 +1,4686 @@
-{"components":{"schemas":{"ApiError":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/ApiError.json"],"format":"uri","readOnly":true,"type":"string"},"error":{"$ref":"#/components/schemas/ApiErrorBody"}},"required":["error"],"type":"object"},"ApiErrorBody":{"additionalProperties":false,"properties":{"code":{"examples":["forbidden_attestation_kind"],"type":"string"},"details":{"additionalProperties":{},"examples":[{"kind":"security.ok"}],"type":"object"},"message":{"examples":["actor cannot attest to this kind"],"type":"string"}},"required":["code","message"],"type":"object"},"AttestationAuthorityRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/AttestationAuthorityRequest.json"],"format":"uri","readOnly":true,"type":"string"},"kind":{"type":"string"},"role_id":{"type":"string"}},"required":["kind","role_id"],"type":"object"},"AttestationConfigSection":{"additionalProperties":false,"properties":{"catalog":{"additionalProperties":{"$ref":"#/components/schemas/Value"},"type":"object"}},"required":["catalog"],"type":"object"},"AttestationResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/AttestationResponse.json"],"format":"uri","readOnly":true,"type":"string"},"actor_id":{"type":"string"},"entity_id":{"type":"string"},"entity_kind":{"enum":["project","iteration","task","decision"],"type":"string"},"id":{"type":"string"},"kind":{"type":"string"},"payload":{"additionalProperties":{},"type":"object"},"project_id":{"type":"string"},"ts":{"format":"date-time","type":"string"}},"required":["id","project_id","entity_kind","entity_id","kind","actor_id","ts"],"type":"object"},"CompleteTaskRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/CompleteTaskRequest.json"],"format":"uri","readOnly":true,"type":"string"},"work_proof":{"additionalProperties":{},"type":"object"}},"required":["work_proof"],"type":"object"},"CreateAttestationRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/CreateAttestationRequest.json"],"format":"uri","readOnly":true,"type":"string"},"entity_id":{"examples":["task-auth-1"],"type":"string"},"entity_kind":{"enum":["project","iteration","task","decision"],"examples":["task"],"type":"string"},"id":{"examples":["att-1"],"type":"string"},"kind":{"examples":["review.approved"],"type":"string"},"payload":{"additionalProperties":{},"examples":[{"note":"LGTM"}],"type":"object"},"ts":{"examples":["2024-05-01T10:00:00Z"],"format":"date-time","type":"string"}},"required":["entity_kind","entity_id","kind"],"type":"object"},"CreateDecisionRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/CreateDecisionRequest.json"],"format":"uri","readOnly":true,"type":"string"},"alternatives":{"examples":[["Rust","NodeJS"]],"items":{"type":"string"},"type":"array"},"context":{"additionalProperties":{},"type":"object"},"decider_id":{"examples":["cto-1"],"type":"string"},"decision":{"examples":["Adopt Go for backend"],"type":"string"},"id":{"examples":["dec-1"],"type":"string"},"rationale":{"examples":[["Team experience","Ecosystem support"]],"items":{"type":"string"},"type":"array"},"title":{"examples":["Choose runtime"],"type":"string"}},"required":["id","title","decision","decider_id"],"type":"object"},"CreateIterationRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/CreateIterationRequest.json"],"format":"uri","readOnly":true,"type":"string"},"goal":{"type":"string"},"id":{"type":"string"}},"required":["id","goal"],"type":"object"},"CreateProjectRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/CreateProjectRequest.json"],"format":"uri","readOnly":true,"type":"string"},"description":{"type":"string"},"id":{"type":"string"}},"required":["id"],"type":"object"},"CreateTaskRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/CreateTaskRequest.json"],"format":"uri","readOnly":true,"type":"string"},"assignee_id":{"examples":["dev-1"],"type":"string"},"depends_on":{"examples":[["task-seed"]],"items":{"type":"string"},"type":"array"},"description":{"examples":["Implement login and SSO flows"],"type":"string"},"id":{"examples":["task-auth-1"],"type":"string"},"iteration_id":{"examples":["iter-1"],"type":"string"},"parent_id":{"examples":["task-epic"],"type":"string"},"policy":{"$ref":"#/components/schemas/TaskPolicyRequest"},"title":{"examples":["Ship authentication"],"type":"string"},"type":{"enum":["technical","feature","bug","docs","chore"],"examples":["feature"],"type":"string"},"validation":{"$ref":"#/components/schemas/TaskValidationRequest"},"work_proof":{"additionalProperties":{},"examples":[{"pr":123}],"type":"object"}},"required":["type","title"],"type":"object"},"DecisionResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/DecisionResponse.json"],"format":"uri","readOnly":true,"type":"string"},"alternatives":{"items":{"type":"string"},"type":"array"},"context":{"additionalProperties":{},"type":"object"},"created_at":{"format":"date-time","type":"string"},"decider_id":{"type":"string"},"decision":{"type":"string"},"id":{"type":"string"},"project_id":{"type":"string"},"rationale":{"items":{"type":"string"},"type":"array"},"title":{"type":"string"}},"required":["id","project_id","title","decision","decider_id","rationale","alternatives","created_at"],"type":"object"},"EventResponse":{"additionalProperties":false,"properties":{"actor_id":{"type":"string"},"entity_id":{"type":"string"},"entity_kind":{"enum":["project","iteration","task","decision","rbac"],"type":"string"},"id":{"format":"int64","type":"integer"},"payload":{"additionalProperties":{},"type":"object"},"project_id":{"type":"string"},"ts":{"format":"date-time","type":"string"},"type":{"type":"string"}},"required":["id","ts","type","entity_kind","actor_id","payload"],"type":"object"},"IterationResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/IterationResponse.json"],"format":"uri","readOnly":true,"type":"string"},"created_at":{"format":"date-time","type":"string"},"goal":{"type":"string"},"id":{"type":"string"},"project_id":{"type":"string"},"status":{"enum":["pending","running","delivered","validated","rejected"],"type":"string"}},"required":["id","project_id","goal","status","created_at"],"type":"object"},"IterationStruct":{"additionalProperties":false,"properties":{"validation":{"$ref":"#/components/schemas/ValidationStruct"}},"required":["validation"],"type":"object"},"LeaseResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/LeaseResponse.json"],"format":"uri","readOnly":true,"type":"string"},"acquired_at":{"format":"date-time","type":"string"},"expires_at":{"format":"date-time","type":"string"},"owner_id":{"type":"string"},"task_id":{"type":"string"}},"required":["task_id","owner_id","acquired_at","expires_at"],"type":"object"},"PaginatedAttestations":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/PaginatedAttestations.json"],"format":"uri","readOnly":true,"type":"string"},"items":{"items":{"$ref":"#/components/schemas/AttestationResponse"},"type":"array"},"next_cursor":{"type":"string"}},"required":["items"],"type":"object"},"PaginatedEvents":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/PaginatedEvents.json"],"format":"uri","readOnly":true,"type":"string"},"items":{"items":{"$ref":"#/components/schemas/EventResponse"},"type":"array"},"next_cursor":{"type":"string"}},"required":["items"],"type":"object"},"PaginatedIterations":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/PaginatedIterations.json"],"format":"uri","readOnly":true,"type":"string"},"items":{"items":{"$ref":"#/components/schemas/IterationResponse"},"type":"array"},"next_cursor":{"type":"string"}},"required":["items"],"type":"object"},"PaginatedTasks":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/PaginatedTasks.json"],"format":"uri","readOnly":true,"type":"string"},"items":{"items":{"$ref":"#/components/schemas/TaskResponse"},"type":"array"},"next_cursor":{"type":"string"}},"required":["items"],"type":"object"},"PolicyConfigSection":{"additionalProperties":false,"properties":{"defaults":{"$ref":"#/components/schemas/PolicyConfigSectionDefaultsStruct"},"presets":{"additionalProperties":{"$ref":"#/components/schemas/PolicyPresetResponse"},"type":"object"}},"required":["presets","defaults"],"type":"object"},"PolicyConfigSectionDefaultsStruct":{"additionalProperties":false,"properties":{"iteration":{"$ref":"#/components/schemas/IterationStruct"},"task":{"additionalProperties":{"type":"string"},"type":"object"}},"required":["task","iteration"],"type":"object"},"PolicyPresetResponse":{"additionalProperties":false,"properties":{"mode":{"enum":["none","all","any","threshold"],"type":"string"},"require":{"items":{"type":"string"},"type":"array"},"threshold":{"format":"int64","type":"integer"}},"required":["mode","require"],"type":"object"},"ProjectConfigResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/ProjectConfigResponse.json"],"format":"uri","readOnly":true,"type":"string"},"attestations":{"$ref":"#/components/schemas/AttestationConfigSection"},"policies":{"$ref":"#/components/schemas/PolicyConfigSection"},"project":{"$ref":"#/components/schemas/ProjectConfigSection"}},"required":["project","attestations","policies"],"type":"object"},"ProjectConfigSection":{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"type":"string"}},"required":["id","kind"],"type":"object"},"ProjectResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/ProjectResponse.json"],"format":"uri","readOnly":true,"type":"string"},"created_at":{"format":"date-time","type":"string"},"description":{"type":"string"},"id":{"type":"string"},"kind":{"type":"string"},"status":{"type":"string"}},"required":["id","kind","status","created_at"],"type":"object"},"RoleChangeRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/RoleChangeRequest.json"],"format":"uri","readOnly":true,"type":"string"},"actor_id":{"type":"string"},"role_id":{"type":"string"}},"required":["actor_id","role_id"],"type":"object"},"SetIterationStatusRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/SetIterationStatusRequest.json"],"format":"uri","readOnly":true,"type":"string"},"status":{"enum":["pending","running","delivered","validated","rejected"],"type":"string"}},"required":["status"],"type":"object"},"TaskPolicyRequest":{"additionalProperties":false,"properties":{"preset":{"examples":["feature.default"],"type":"string"}},"type":"object"},"TaskResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/TaskResponse.json"],"format":"uri","readOnly":true,"type":"string"},"assignee_id":{"examples":["dev-1"],"type":"string"},"completed_at":{"examples":["2024-05-02T10:00:00Z"],"format":"date-time","type":["string","null"]},"created_at":{"examples":["2024-05-01T09:00:00Z"],"format":"date-time","type":"string"},"depends_on":{"examples":[[]],"items":{"type":"string"},"type":"array"},"description":{"examples":["Implement login and SSO flows"],"type":"string"},"id":{"examples":["task-auth-1"],"type":"string"},"iteration_id":{"examples":["iter-1"],"type":"string"},"parent_id":{"examples":["task-epic"],"type":"string"},"project_id":{"examples":["proofline"],"type":"string"},"required_attestations":{"examples":[["ci.passed","review.approved"]],"items":{"type":"string"},"type":"array"},"required_threshold":{"examples":[2],"format":"int64","type":"integer"},"status":{"enum":["planned","in_progress","review","done","rejected","canceled"],"examples":["planned"],"type":"string"},"title":{"examples":["Ship authentication"],"type":"string"},"type":{"enum":["technical","feature","bug","docs","chore"],"examples":["feature"],"type":"string"},"updated_at":{"examples":["2024-05-01T09:05:00Z"],"format":"date-time","type":"string"},"validation_mode":{"enum":["none","all","any","threshold"],"examples":["all"],"type":"string"},"work_proof":{"additionalProperties":{},"examples":[{"pr":123}],"type":"object"}},"required":["id","project_id","type","title","status","validation_mode","required_attestations","depends_on","created_at","updated_at","completed_at"],"type":"object"},"TaskValidationRequest":{"additionalProperties":false,"properties":{"mode":{"enum":["none","all","any","threshold"],"examples":["all"],"type":"string"},"require":{"examples":[["ci.passed","review.approved"]],"items":{"type":"string"},"type":"array"},"threshold":{"examples":[2],"format":"int64","type":"integer"}},"type":"object"},"TreeNode":{"additionalProperties":false,"properties":{"children":{"items":{"$ref":"#/components/schemas/TreeNode"},"type":"array"},"task":{"$ref":"#/components/schemas/TaskResponse"}},"required":["task","children"],"type":"object"},"Update-projectRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/Update-projectRequest.json"],"format":"uri","readOnly":true,"type":"string"},"description":{"type":"string"},"status":{"type":"string"}},"type":"object"},"UpdateTaskRequest":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/UpdateTaskRequest.json"],"format":"uri","readOnly":true,"type":"string"},"add_depends_on":{"items":{"type":"string"},"type":"array"},"assignee_id":{"type":"string"},"parent_id":{"type":"string"},"remove_depends_on":{"items":{"type":"string"},"type":"array"},"status":{"enum":["planned","in_progress","review","done","rejected","canceled"],"type":"string"},"validation":{"$ref":"#/components/schemas/UpdateTaskValidationRequest"},"work_proof":{"additionalProperties":{},"type":"object"}},"type":"object"},"UpdateTaskValidationRequest":{"additionalProperties":false,"properties":{"mode":{"enum":["none","all","any","threshold"],"type":"string"},"require":{"items":{"type":"string"},"type":"array"},"threshold":{"format":"int64","type":"integer"}},"type":"object"},"ValidationStatusResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/ValidationStatusResponse.json"],"format":"uri","readOnly":true,"type":"string"},"missing":{"examples":[["review.approved"]],"items":{"type":"string"},"type":"array"},"mode":{"enum":["none","all","any","threshold"],"examples":["all"],"type":"string"},"present":{"examples":[["ci.passed"]],"items":{"type":"string"},"type":"array"},"required":{"examples":[["ci.passed","review.approved"]],"items":{"type":"string"},"type":"array"},"satisfied":{"examples":[false],"type":"boolean"},"threshold":{"examples":[2],"format":"int64","type":"integer"}},"required":["mode","required","present","missing","satisfied"],"type":"object"},"ValidationStruct":{"additionalProperties":false,"properties":{"require":{"type":"string"}},"required":["require"],"type":"object"},"Value":{"additionalProperties":false,"properties":{"description":{"type":"string"}},"required":["description"],"type":"object"},"WhoAmIResponse":{"additionalProperties":false,"properties":{"$schema":{"description":"A URL to the JSON Schema for this object.","examples":["https://example.com/schemas/WhoAmIResponse.json"],"format":"uri","readOnly":true,"type":"string"},"actor_id":{"type":"string"},"permissions":{"items":{"type":"string"},"type":"array"},"roles":{"items":{"type":"string"},"type":"array"}},"required":["actor_id","roles","permissions"],"type":"object"}}},"info":{"title":"Proofline API","version":"0.1.1"},"openapi":"3.1.0","paths":{"/v0/health":{"get":{"operationId":"health","responses":{"200":{"content":{"application/json":{"schema":{"additionalProperties":{"type":"string"},"type":"object"}}},"description":"OK"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Health check"}},"/v0/projects":{"get":{"operationId":"list-projects","responses":{"200":{"content":{"application/json":{"schema":{"items":{"$ref":"#/components/schemas/ProjectResponse"},"type":"array"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"List projects"},"post":{"operationId":"create-project","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateProjectRequest"}}},"required":true},"responses":{"201":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ProjectResponse"}}},"description":"Created"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Create project"}},"/v0/projects/{project_id}":{"delete":{"operationId":"delete-project","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"responses":{"204":{"description":"No Content"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Delete project"},"get":{"operationId":"get-project","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ProjectResponse"}}},"description":"OK"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Get project"},"patch":{"operationId":"update-project","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Update-projectRequest"}}},"required":true},"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ProjectResponse"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Update project"}},"/v0/projects/{project_id}/attestations":{"get":{"operationId":"list-attestations","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"entity_kind","schema":{"enum":["project","iteration","task","decision"],"type":"string"}},{"explode":false,"in":"query","name":"entity_id","schema":{"type":"string"}},{"explode":false,"in":"query","name":"kind","schema":{"type":"string"}},{"explode":false,"in":"query","name":"limit","schema":{"default":50,"format":"int64","type":"integer"}},{"explode":false,"in":"query","name":"cursor","schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/PaginatedAttestations"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"List attestations"},"post":{"operationId":"add-attestation","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateAttestationRequest"}}},"required":true},"responses":{"201":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/AttestationResponse"}}},"description":"Created"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Add attestation"}},"/v0/projects/{project_id}/config":{"get":{"operationId":"get-project-config","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ProjectConfigResponse"}}},"description":"OK"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Get project config"}},"/v0/projects/{project_id}/decisions":{"post":{"operationId":"create-decision","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateDecisionRequest"}}},"required":true},"responses":{"201":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/DecisionResponse"}}},"description":"Created"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Create decision"}},"/v0/projects/{project_id}/events":{"get":{"operationId":"list-events","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"type","schema":{"type":"string"}},{"explode":false,"in":"query","name":"entity_kind","schema":{"enum":["project","iteration","task","decision","rbac"],"type":"string"}},{"explode":false,"in":"query","name":"entity_id","schema":{"type":"string"}},{"explode":false,"in":"query","name":"limit","schema":{"default":50,"format":"int64","type":"integer"}},{"explode":false,"in":"query","name":"cursor","schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/PaginatedEvents"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"List recent events"}},"/v0/projects/{project_id}/iterations":{"get":{"operationId":"list-iterations","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"limit","schema":{"default":50,"format":"int64","type":"integer"}},{"explode":false,"in":"query","name":"cursor","schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/PaginatedIterations"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"List iterations"},"post":{"operationId":"create-iteration","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateIterationRequest"}}},"required":true},"responses":{"201":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/IterationResponse"}}},"description":"Created"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Create iteration"}},"/v0/projects/{project_id}/iterations/{id}/status":{"patch":{"operationId":"set-iteration-status","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"in":"path","name":"id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"force","schema":{"type":"boolean"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/SetIterationStatusRequest"}}},"required":true},"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/IterationResponse"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Update iteration status"}},"/v0/projects/{project_id}/me/permissions":{"get":{"operationId":"whoami","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/WhoAmIResponse"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Current actor permissions"}},"/v0/projects/{project_id}/rbac/attestations/allow":{"post":{"operationId":"allow-attestation-role","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/AttestationAuthorityRequest"}}},"required":true},"responses":{"204":{"description":"No Content"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Allow attestation role"}},"/v0/projects/{project_id}/rbac/attestations/deny":{"post":{"operationId":"deny-attestation-role","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/AttestationAuthorityRequest"}}},"required":true},"responses":{"204":{"description":"No Content"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Deny attestation role"}},"/v0/projects/{project_id}/rbac/roles/grant":{"post":{"operationId":"grant-role","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/RoleChangeRequest"}}},"required":true},"responses":{"204":{"description":"No Content"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Grant role"}},"/v0/projects/{project_id}/rbac/roles/revoke":{"post":{"operationId":"revoke-role","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/RoleChangeRequest"}}},"required":true},"responses":{"204":{"description":"No Content"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Revoke role"}},"/v0/projects/{project_id}/status":{"get":{"operationId":"status","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"additionalProperties":{},"type":"object"}}},"description":"OK"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Project status"}},"/v0/projects/{project_id}/tasks":{"get":{"operationId":"list-tasks","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"status","schema":{"type":"string"}},{"explode":false,"in":"query","name":"iteration_id","schema":{"type":"string"}},{"explode":false,"in":"query","name":"parent_id","schema":{"type":"string"}},{"explode":false,"in":"query","name":"assignee_id","schema":{"type":"string"}},{"explode":false,"in":"query","name":"limit","schema":{"default":50,"format":"int64","type":"integer"}},{"explode":false,"in":"query","name":"cursor","schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/PaginatedTasks"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"List tasks"},"post":{"operationId":"create-task","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateTaskRequest"}}},"required":true},"responses":{"201":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/TaskResponse"}}},"description":"Created"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Create task"}},"/v0/projects/{project_id}/tasks/tree":{"get":{"operationId":"task-tree","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"iteration_id","schema":{"type":"string"}},{"explode":false,"in":"query","name":"status","schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"items":{"$ref":"#/components/schemas/TreeNode"},"type":"array"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Task tree"}},"/v0/projects/{project_id}/tasks/{id}":{"get":{"operationId":"get-task","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"in":"path","name":"id","required":true,"schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/TaskResponse"}}},"description":"OK"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Get task"},"patch":{"operationId":"update-task","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"in":"path","name":"id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"force","schema":{"type":"boolean"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateTaskRequest"}}},"required":true},"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/TaskResponse"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Update task"}},"/v0/projects/{project_id}/tasks/{id}/claim":{"post":{"operationId":"claim-task","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"in":"path","name":"id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"lease_seconds","schema":{"default":900,"format":"int64","type":"integer"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/LeaseResponse"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Claim task lease"}},"/v0/projects/{project_id}/tasks/{id}/done":{"post":{"operationId":"complete-task","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"in":"path","name":"id","required":true,"schema":{"type":"string"}},{"explode":false,"in":"query","name":"force","schema":{"type":"boolean"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CompleteTaskRequest"}}},"required":true},"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/TaskResponse"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Complete task"}},"/v0/projects/{project_id}/tasks/{id}/release":{"post":{"operationId":"release-task","parameters":[{"in":"header","name":"X-Actor-Id","required":true,"schema":{"type":"string"}},{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"in":"path","name":"id","required":true,"schema":{"type":"string"}}],"responses":{"204":{"description":"No Content"},"403":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Forbidden"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"409":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Conflict"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Release task lease"}},"/v0/projects/{project_id}/tasks/{id}/validation":{"get":{"operationId":"task-validation-status","parameters":[{"in":"path","name":"project_id","required":true,"schema":{"type":"string"}},{"in":"path","name":"id","required":true,"schema":{"type":"string"}}],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ValidationStatusResponse"}}},"description":"OK"},"400":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Bad Request"},"404":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Not Found"},"422":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Unprocessable Entity"},"500":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Internal Server Error"},"default":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiError"}}},"description":"Error"}},"summary":"Task validation status"}}}}
+{
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ApiError.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiErrorBody"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "ApiErrorBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "examples": [
+              "forbidden_attestation_kind"
+            ],
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": {},
+            "examples": [
+              {
+                "kind": "security.ok"
+              }
+            ],
+            "type": "object"
+          },
+          "message": {
+            "examples": [
+              "actor cannot attest to this kind"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "AttestationAuthorityRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/AttestationAuthorityRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "role_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "role_id"
+        ],
+        "type": "object"
+      },
+      "AttestationConfigSection": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Value"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "catalog"
+        ],
+        "type": "object"
+      },
+      "AttestationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/AttestationResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "entity_kind": {
+            "enum": [
+              "project",
+              "iteration",
+              "task",
+              "decision"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "entity_kind",
+          "entity_id",
+          "kind",
+          "actor_id",
+          "ts"
+        ],
+        "type": "object"
+      },
+      "CompleteTaskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CompleteTaskRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "work_proof": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "required": [
+          "work_proof"
+        ],
+        "type": "object"
+      },
+      "CreateAttestationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CreateAttestationRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "entity_id": {
+            "examples": [
+              "task-auth-1"
+            ],
+            "type": "string"
+          },
+          "entity_kind": {
+            "enum": [
+              "project",
+              "iteration",
+              "task",
+              "decision"
+            ],
+            "examples": [
+              "task"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "examples": [
+              "att-1"
+            ],
+            "type": "string"
+          },
+          "kind": {
+            "examples": [
+              "review.approved"
+            ],
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": {},
+            "examples": [
+              {
+                "note": "LGTM"
+              }
+            ],
+            "type": "object"
+          },
+          "ts": {
+            "examples": [
+              "2024-05-01T10:00:00Z"
+            ],
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_kind",
+          "entity_id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "CreateDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CreateDecisionRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "alternatives": {
+            "examples": [
+              [
+                "Rust",
+                "NodeJS"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "context": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "decider_id": {
+            "examples": [
+              "cto-1"
+            ],
+            "type": "string"
+          },
+          "decision": {
+            "examples": [
+              "Adopt Go for backend"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "examples": [
+              "dec-1"
+            ],
+            "type": "string"
+          },
+          "rationale": {
+            "examples": [
+              [
+                "Team experience",
+                "Ecosystem support"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "examples": [
+              "Choose runtime"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "decision",
+          "decider_id"
+        ],
+        "type": "object"
+      },
+      "CreateIterationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CreateIterationRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal"
+        ],
+        "type": "object"
+      },
+      "CreateProjectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CreateProjectRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "CreateTaskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CreateTaskRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "assignee_id": {
+            "examples": [
+              "dev-1"
+            ],
+            "type": "string"
+          },
+          "depends_on": {
+            "examples": [
+              [
+                "task-seed"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "examples": [
+              "Implement login and SSO flows"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "examples": [
+              "task-auth-1"
+            ],
+            "type": "string"
+          },
+          "iteration_id": {
+            "examples": [
+              "iter-1"
+            ],
+            "type": "string"
+          },
+          "parent_id": {
+            "examples": [
+              "task-epic"
+            ],
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/TaskPolicyRequest"
+          },
+          "title": {
+            "examples": [
+              "Ship authentication"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "technical",
+              "feature",
+              "bug",
+              "docs",
+              "chore"
+            ],
+            "examples": [
+              "feature"
+            ],
+            "type": "string"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/TaskValidationRequest"
+          },
+          "work_proof": {
+            "additionalProperties": {},
+            "examples": [
+              {
+                "pr": 123
+              }
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title"
+        ],
+        "type": "object"
+      },
+      "DecisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/DecisionResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "alternatives": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "context": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "decider_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "rationale": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "title",
+          "decision",
+          "decider_id",
+          "rationale",
+          "alternatives",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "EventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "entity_kind": {
+            "enum": [
+              "project",
+              "iteration",
+              "task",
+              "decision",
+              "rbac"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "payload": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ts",
+          "type",
+          "entity_kind",
+          "actor_id",
+          "payload"
+        ],
+        "type": "object"
+      },
+      "IterationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/IterationResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "delivered",
+              "validated",
+              "rejected"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "goal",
+          "status",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "IterationStruct": {
+        "additionalProperties": false,
+        "properties": {
+          "validation": {
+            "$ref": "#/components/schemas/ValidationStruct"
+          }
+        },
+        "required": [
+          "validation"
+        ],
+        "type": "object"
+      },
+      "LeaseResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/LeaseResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "acquired_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "owner_id",
+          "acquired_at",
+          "expires_at"
+        ],
+        "type": "object"
+      },
+      "PaginatedAttestations": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/PaginatedAttestations.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AttestationResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PaginatedEvents": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/PaginatedEvents.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EventResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PaginatedIterations": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/PaginatedIterations.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IterationResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PaginatedTasks": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/PaginatedTasks.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaskResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PolicyConfigSection": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/PolicyConfigSectionDefaultsStruct"
+          },
+          "presets": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PolicyPresetResponse"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "presets",
+          "defaults"
+        ],
+        "type": "object"
+      },
+      "PolicyConfigSectionDefaultsStruct": {
+        "additionalProperties": false,
+        "properties": {
+          "iteration": {
+            "$ref": "#/components/schemas/IterationStruct"
+          },
+          "task": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "task",
+          "iteration"
+        ],
+        "type": "object"
+      },
+      "PolicyPresetResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "none",
+              "all",
+              "any",
+              "threshold"
+            ],
+            "type": "string"
+          },
+          "require": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "require"
+        ],
+        "type": "object"
+      },
+      "ProjectConfigResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ProjectConfigResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "attestations": {
+            "$ref": "#/components/schemas/AttestationConfigSection"
+          },
+          "policies": {
+            "$ref": "#/components/schemas/PolicyConfigSection"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectConfigSection"
+          }
+        },
+        "required": [
+          "project",
+          "attestations",
+          "policies"
+        ],
+        "type": "object"
+      },
+      "ProjectConfigSection": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ProjectResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ProjectResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "RoleChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/RoleChangeRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "role_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor_id",
+          "role_id"
+        ],
+        "type": "object"
+      },
+      "SetIterationStatusRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/SetIterationStatusRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "delivered",
+              "validated",
+              "rejected"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "TaskPolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "preset": {
+            "examples": [
+              "feature.default"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TaskResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/TaskResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "assignee_id": {
+            "examples": [
+              "dev-1"
+            ],
+            "type": "string"
+          },
+          "completed_at": {
+            "examples": [
+              "2024-05-02T10:00:00Z"
+            ],
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "examples": [
+              "2024-05-01T09:00:00Z"
+            ],
+            "format": "date-time",
+            "type": "string"
+          },
+          "depends_on": {
+            "examples": [
+              []
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "examples": [
+              "Implement login and SSO flows"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "examples": [
+              "task-auth-1"
+            ],
+            "type": "string"
+          },
+          "iteration_id": {
+            "examples": [
+              "iter-1"
+            ],
+            "type": "string"
+          },
+          "parent_id": {
+            "examples": [
+              "task-epic"
+            ],
+            "type": "string"
+          },
+          "project_id": {
+            "examples": [
+              "proofline"
+            ],
+            "type": "string"
+          },
+          "required_attestations": {
+            "examples": [
+              [
+                "ci.passed",
+                "review.approved"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "required_threshold": {
+            "examples": [
+              2
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "in_progress",
+              "review",
+              "done",
+              "rejected",
+              "canceled"
+            ],
+            "examples": [
+              "planned"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "examples": [
+              "Ship authentication"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "technical",
+              "feature",
+              "bug",
+              "docs",
+              "chore"
+            ],
+            "examples": [
+              "feature"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "examples": [
+              "2024-05-01T09:05:00Z"
+            ],
+            "format": "date-time",
+            "type": "string"
+          },
+          "validation_mode": {
+            "enum": [
+              "none",
+              "all",
+              "any",
+              "threshold"
+            ],
+            "examples": [
+              "all"
+            ],
+            "type": "string"
+          },
+          "work_proof": {
+            "additionalProperties": {},
+            "examples": [
+              {
+                "pr": 123
+              }
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "type",
+          "title",
+          "status",
+          "validation_mode",
+          "required_attestations",
+          "depends_on",
+          "created_at",
+          "updated_at",
+          "completed_at"
+        ],
+        "type": "object"
+      },
+      "TaskValidationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "none",
+              "all",
+              "any",
+              "threshold"
+            ],
+            "examples": [
+              "all"
+            ],
+            "type": "string"
+          },
+          "require": {
+            "examples": [
+              [
+                "ci.passed",
+                "review.approved"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "examples": [
+              2
+            ],
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TreeNode": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/TreeNode"
+            },
+            "type": "array"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskResponse"
+          }
+        },
+        "required": [
+          "task",
+          "children"
+        ],
+        "type": "object"
+      },
+      "Update-projectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/Update-projectRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateTaskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/UpdateTaskRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "add_depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "assignee_id": {
+            "type": "string"
+          },
+          "parent_id": {
+            "type": "string"
+          },
+          "remove_depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "in_progress",
+              "review",
+              "done",
+              "rejected",
+              "canceled"
+            ],
+            "type": "string"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/UpdateTaskValidationRequest"
+          },
+          "work_proof": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateTaskValidationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "none",
+              "all",
+              "any",
+              "threshold"
+            ],
+            "type": "string"
+          },
+          "require": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ValidationStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ValidationStatusResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "missing": {
+            "examples": [
+              [
+                "review.approved"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "none",
+              "all",
+              "any",
+              "threshold"
+            ],
+            "examples": [
+              "all"
+            ],
+            "type": "string"
+          },
+          "present": {
+            "examples": [
+              [
+                "ci.passed"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "required": {
+            "examples": [
+              [
+                "ci.passed",
+                "review.approved"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "satisfied": {
+            "examples": [
+              false
+            ],
+            "type": "boolean"
+          },
+          "threshold": {
+            "examples": [
+              2
+            ],
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "required",
+          "present",
+          "missing",
+          "satisfied"
+        ],
+        "type": "object"
+      },
+      "ValidationStruct": {
+        "additionalProperties": false,
+        "properties": {
+          "require": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "require"
+        ],
+        "type": "object"
+      },
+      "Value": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "WhoAmIResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/WhoAmIResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "actor_id",
+          "roles",
+          "permissions"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "apiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Api-Key"
+      }
+    }
+  },
+  "info": {
+    "title": "Proofline API",
+    "version": "0.1.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v0/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Health check",
+        "security": []
+      }
+    },
+    "/v0/projects": {
+      "get": {
+        "operationId": "list-projects",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List projects",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "create-project",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create project",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}": {
+      "delete": {
+        "operationId": "delete-project",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete project",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get-project",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get project",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "update-project",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Update-projectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update project",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/attestations": {
+      "get": {
+        "operationId": "list-attestations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "entity_kind",
+            "schema": {
+              "enum": [
+                "project",
+                "iteration",
+                "task",
+                "decision"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "entity_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAttestations"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List attestations",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "add-attestation",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAttestationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttestationResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Add attestation",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/config": {
+      "get": {
+        "operationId": "get-project-config",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectConfigResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get project config",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/decisions": {
+      "post": {
+        "operationId": "create-decision",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create decision",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/events": {
+      "get": {
+        "operationId": "list-events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "entity_kind",
+            "schema": {
+              "enum": [
+                "project",
+                "iteration",
+                "task",
+                "decision",
+                "rbac"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "entity_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedEvents"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List recent events",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/iterations": {
+      "get": {
+        "operationId": "list-iterations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedIterations"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List iterations",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "create-iteration",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIterationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IterationResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create iteration",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/iterations/{id}/status": {
+      "patch": {
+        "operationId": "set-iteration-status",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "force",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetIterationStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IterationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update iteration status",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/me/permissions": {
+      "get": {
+        "operationId": "whoami",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhoAmIResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Current actor permissions",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/rbac/attestations/allow": {
+      "post": {
+        "operationId": "allow-attestation-role",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttestationAuthorityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Allow attestation role",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/rbac/attestations/deny": {
+      "post": {
+        "operationId": "deny-attestation-role",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttestationAuthorityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Deny attestation role",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/rbac/roles/grant": {
+      "post": {
+        "operationId": "grant-role",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Grant role",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/rbac/roles/revoke": {
+      "post": {
+        "operationId": "revoke-role",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Revoke role",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/status": {
+      "get": {
+        "operationId": "status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {},
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Project status",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/tasks": {
+      "get": {
+        "operationId": "list-tasks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "iteration_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "parent_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "assignee_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedTasks"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List tasks",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "create-task",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create task",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/tasks/tree": {
+      "get": {
+        "operationId": "task-tree",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "iteration_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TreeNode"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Task tree",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/tasks/{id}": {
+      "get": {
+        "operationId": "get-task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get task",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "update-task",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "force",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update task",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/tasks/{id}/claim": {
+      "post": {
+        "operationId": "claim-task",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "lease_seconds",
+            "schema": {
+              "default": 900,
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Claim task lease",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/tasks/{id}/done": {
+      "post": {
+        "operationId": "complete-task",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "force",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Complete task",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/tasks/{id}/release": {
+      "post": {
+        "operationId": "release-task",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Actor-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "deprecated": true,
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Release task lease",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v0/projects/{project_id}/tasks/{id}/validation": {
+      "get": {
+        "operationId": "task-validation-status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
+            "deprecated": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationStatusResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Task validation status",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {
+      "apiKeyAuth": []
+    }
+  ]
+}

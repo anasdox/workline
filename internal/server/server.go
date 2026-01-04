@@ -27,6 +27,7 @@ import (
 type Config struct {
 	Engine   engine.Engine
 	BasePath string
+	Auth     AuthConfig
 }
 
 type apiErrorBody struct {
@@ -52,6 +53,9 @@ func New(cfg Config) (http.Handler, error) {
 	basePath := cfg.BasePath
 	if basePath == "" {
 		basePath = "/v0"
+	}
+	if !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
 	}
 	huma.DefaultArrayNullable = false
 	// Override Huma errors to use the requested envelope.
@@ -80,6 +84,7 @@ func New(cfg Config) (http.Handler, error) {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})
+	router.Use(newAuthMiddleware(basePath, cfg.Auth, cfg.Engine.Repo))
 	hcfg := huma.DefaultConfig("Proofline API", "0.1.1")
 	hcfg.OpenAPIPath = "/openapi"
 	hcfg.DocsPath = "" // custom Swagger UI below
@@ -181,6 +186,7 @@ func registerOpenAPI(r chi.Router, api huma.API, basePath string) {
 		if spec == nil {
 			oas := api.OpenAPI()
 			ensureDefaultErrorResponses(oas)
+			applyAuthSecurity(oas, basePath)
 			spec, _ = json.Marshal(oas)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -214,6 +220,57 @@ func ensureDefaultErrorResponses(oas *huma.OpenAPI) {
 	}
 }
 
+func applyAuthSecurity(oas *huma.OpenAPI, basePath string) {
+	if oas == nil {
+		return
+	}
+	if oas.Components == nil {
+		oas.Components = &huma.Components{}
+	}
+	if oas.Components.SecuritySchemes == nil {
+		oas.Components.SecuritySchemes = map[string]*huma.SecurityScheme{}
+	}
+	oas.Components.SecuritySchemes["bearerAuth"] = &huma.SecurityScheme{
+		Type:         "http",
+		Scheme:       "bearer",
+		BearerFormat: "JWT",
+	}
+	oas.Components.SecuritySchemes["apiKeyAuth"] = &huma.SecurityScheme{
+		Type: "apiKey",
+		In:   "header",
+		Name: "X-Api-Key",
+	}
+	security := []map[string][]string{
+		{"bearerAuth": {}},
+		{"apiKeyAuth": {}},
+	}
+	oas.Security = security
+	healthPath := path.Join(basePath, "health")
+	if !strings.HasPrefix(healthPath, "/") {
+		healthPath = "/" + healthPath
+	}
+	for route, item := range oas.Paths {
+		for _, op := range []*huma.Operation{
+			item.Get, item.Put, item.Post, item.Delete, item.Options, item.Head, item.Patch, item.Trace,
+		} {
+			if op == nil {
+				continue
+			}
+			if route == healthPath {
+				op.Security = []map[string][]string{}
+				continue
+			}
+			op.Security = security
+			op.Parameters = append(op.Parameters, &huma.Param{
+				Name:        "X-Actor-Id",
+				In:          "header",
+				Description: "Deprecated; ignored when Authorization or X-Api-Key is present.",
+				Deprecated:  true,
+			})
+		}
+	}
+}
+
 func swaggerHTML(basePath string) string {
 	specURL := path.Join("/", path.Join(basePath, "openapi.json"))
 	return fmt.Sprintf(`<!doctype html>
@@ -236,7 +293,7 @@ func swaggerHTML(basePath string) string {
       };
     </script>
     <p style="padding: 1rem; font-family: sans-serif; color: #444;">
-      Local, no-auth API for agents. Add auth before exposing beyond localhost.
+      Authenticate with Authorization: Bearer &lt;token&gt; or X-Api-Key. X-Actor-Id is deprecated and ignored when auth headers are present.
     </p>
   </body>
 </html>`, specURL)
@@ -309,8 +366,7 @@ func registerProjects(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID string               `header:"X-Actor-Id" required:"true"`
-		Body    CreateProjectRequest `json:"body"`
+		Body CreateProjectRequest `json:"body"`
 	}) (*struct {
 		Body ProjectResponse `json:"body"`
 	}, error) {
@@ -320,11 +376,15 @@ func registerProjects(api huma.API, e engine.Engine) {
 		if input.Body.ID == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "id is required", nil)
 		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		desc := ""
 		if input.Body.Description != nil {
 			desc = *input.Body.Description
 		}
-		p, err := e.InitProject(ctx, input.Body.ID, desc, actorOrDefault(input.ActorID))
+		p, err := e.InitProject(ctx, input.Body.ID, desc, actorID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -387,7 +447,6 @@ func registerProjects(api huma.API, e engine.Engine) {
 			http.StatusUnprocessableEntity,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string `header:"X-Actor-Id" required:"true"`
 		ProjectID string `path:"project_id"`
 		Body      struct {
 			Status      string  `json:"status,omitempty"`
@@ -398,6 +457,9 @@ func registerProjects(api huma.API, e engine.Engine) {
 	}, error) {
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		if _, authErr := actorIDFromContext(ctx); authErr != nil {
+			return nil, authErr
 		}
 		if err := e.Repo.UpdateProject(ctx, input.ProjectID, input.Body.Status, input.Body.Description); err != nil {
 			return nil, handleError(err)
@@ -423,9 +485,11 @@ func registerProjects(api huma.API, e engine.Engine) {
 			http.StatusUnprocessableEntity,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string `header:"X-Actor-Id" required:"true"`
 		ProjectID string `path:"project_id"`
 	}) (*struct{}, error) {
+		if _, authErr := actorIDFromContext(ctx); authErr != nil {
+			return nil, authErr
+		}
 		if err := e.Repo.DeleteProject(ctx, input.ProjectID); err != nil {
 			return nil, handleError(err)
 		}
@@ -469,7 +533,6 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string            `header:"X-Actor-Id" required:"true"`
 		ProjectID string            `path:"project_id"`
 		Body      CreateTaskRequest `json:"body"`
 	}) (*struct {
@@ -488,12 +551,16 @@ func registerTasks(api huma.API, e engine.Engine) {
 		if isNullRaw(bodyMap["depends_on"]) {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "depends_on must be array", map[string]any{"field": "depends_on", "reason": "must be array"})
 		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
 		opts := engine.TaskCreateOptions{
 			ProjectID:   projectID,
 			Type:        input.Body.Type,
 			Title:       input.Body.Title,
-			ActorID:     actorOrDefault(input.ActorID),
+			ActorID:     actorID,
 			Description: stringOrEmpty(input.Body.Description),
 			DependsOn:   input.Body.DependsOn,
 		}
@@ -632,7 +699,6 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string            `header:"X-Actor-Id" required:"true"`
 		ProjectID string            `path:"project_id"`
 		ID        string            `path:"id"`
 		Body      UpdateTaskRequest `json:"body"`
@@ -644,9 +710,13 @@ func registerTasks(api huma.API, e engine.Engine) {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
 		}
 		bodyMap := rawBodyMap(ctx)
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		opts := engine.TaskUpdateOptions{
 			ID:      input.ID,
-			ActorID: actorOrDefault(input.ActorID),
+			ActorID: actorID,
 			Force:   input.Force,
 		}
 		if input.Body.Status != nil {
@@ -740,7 +810,6 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string              `header:"X-Actor-Id" required:"true"`
 		ProjectID string              `path:"project_id"`
 		ID        string              `path:"id"`
 		Body      CompleteTaskRequest `json:"body"`
@@ -751,6 +820,10 @@ func registerTasks(api huma.API, e engine.Engine) {
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
 		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		if input.Body.WorkProof == nil {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "work_proof is required", nil)
 		}
@@ -759,7 +832,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid work_proof", map[string]any{"error": err.Error()})
 		}
 		workProof := string(data)
-		t, err := e.TaskDone(ctx, input.ID, workProof, actorOrDefault(input.ActorID), input.Force)
+		t, err := e.TaskDone(ctx, input.ID, workProof, actorID, input.Force)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -785,13 +858,16 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID      string `header:"X-Actor-Id" required:"true"`
 		ProjectID    string `path:"project_id"`
 		ID           string `path:"id"`
 		LeaseSeconds int    `query:"lease_seconds" default:"900"`
 	}) (*struct {
 		Body LeaseResponse `json:"body"`
 	}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		task, err := e.Repo.GetTask(ctx, input.ID)
 		if err != nil {
 			return nil, handleError(err)
@@ -799,7 +875,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 		if !projectMatches(input.ProjectID, task.ProjectID) {
 			return nil, newAPIError(http.StatusNotFound, "not_found", "task not found in project", nil)
 		}
-		lease, err := e.ClaimLease(ctx, input.ID, actorOrDefault(input.ActorID), input.LeaseSeconds)
+		lease, err := e.ClaimLease(ctx, input.ID, actorID, input.LeaseSeconds)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -821,10 +897,13 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string `header:"X-Actor-Id" required:"true"`
 		ProjectID string `path:"project_id"`
 		ID        string `path:"id"`
 	}) (*struct{}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		task, err := e.Repo.GetTask(ctx, input.ID)
 		if err != nil {
 			return nil, handleError(err)
@@ -832,7 +911,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 		if !projectMatches(input.ProjectID, task.ProjectID) {
 			return nil, newAPIError(http.StatusNotFound, "not_found", "task not found in project", nil)
 		}
-		if err := e.ReleaseLease(ctx, input.ID, actorOrDefault(input.ActorID)); err != nil {
+		if err := e.ReleaseLease(ctx, input.ID, actorID); err != nil {
 			return nil, handleError(err)
 		}
 		return &struct{}{}, nil
@@ -934,7 +1013,6 @@ func registerIterations(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string                 `header:"X-Actor-Id" required:"true"`
 		ProjectID string                 `path:"project_id"`
 		Body      CreateIterationRequest `json:"body"`
 	}) (*struct {
@@ -942,6 +1020,10 @@ func registerIterations(api huma.API, e engine.Engine) {
 	}, error) {
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
 		}
 		if input.Body.ID == "" || input.Body.Goal == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "id and goal are required", nil)
@@ -952,7 +1034,7 @@ func registerIterations(api huma.API, e engine.Engine) {
 			ProjectID: bodyProject,
 			Goal:      input.Body.Goal,
 		}
-		res, err := e.CreateIteration(ctx, it, actorOrDefault(input.ActorID))
+		res, err := e.CreateIteration(ctx, it, actorID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -1010,7 +1092,6 @@ func registerIterations(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string                    `header:"X-Actor-Id" required:"true"`
 		ProjectID string                    `path:"project_id"`
 		ID        string                    `path:"id"`
 		Body      SetIterationStatusRequest `json:"body"`
@@ -1021,10 +1102,14 @@ func registerIterations(api huma.API, e engine.Engine) {
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
 		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		if input.Body.Status == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "status is required", nil)
 		}
-		it, err := e.SetIterationStatus(ctx, input.ID, input.Body.Status, actorOrDefault(input.ActorID), input.Force)
+		it, err := e.SetIterationStatus(ctx, input.ID, input.Body.Status, actorID, input.Force)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -1053,7 +1138,6 @@ func registerDecisions(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string                `header:"X-Actor-Id" required:"true"`
 		ProjectID string                `path:"project_id"`
 		Body      CreateDecisionRequest `json:"body"`
 	}) (*struct {
@@ -1062,6 +1146,10 @@ func registerDecisions(api huma.API, e engine.Engine) {
 		bodyMap := rawBodyMap(ctx)
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
 		}
 		if input.Body.ID == "" || input.Body.Title == "" || input.Body.Decision == "" || input.Body.DeciderID == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "id, title, decision, and decider_id are required", nil)
@@ -1093,7 +1181,7 @@ func registerDecisions(api huma.API, e engine.Engine) {
 		if len(input.Body.Alternatives) > 0 {
 			d.AlternativesJSON = toJSONArray(input.Body.Alternatives)
 		}
-		res, err := e.CreateDecision(ctx, d, actorOrDefault(input.ActorID))
+		res, err := e.CreateDecision(ctx, d, actorID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -1119,7 +1207,6 @@ func registerAttestations(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string                   `header:"X-Actor-Id" required:"true"`
 		ProjectID string                   `path:"project_id"`
 		Body      CreateAttestationRequest `json:"body"`
 	}) (*struct {
@@ -1127,6 +1214,10 @@ func registerAttestations(api huma.API, e engine.Engine) {
 	}, error) {
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
 		}
 		if input.Body.EntityKind == "" || input.Body.EntityID == "" || input.Body.Kind == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "entity_kind, entity_id and kind are required", nil)
@@ -1151,7 +1242,7 @@ func registerAttestations(api huma.API, e engine.Engine) {
 		if input.Body.TS != nil {
 			att.TS = *input.Body.TS
 		}
-		res, err := e.AddAttestation(ctx, att, actorOrDefault(input.ActorID))
+		res, err := e.AddAttestation(ctx, att, actorID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -1263,13 +1354,16 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusNotFound,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string `header:"X-Actor-Id" required:"true"`
 		ProjectID string `path:"project_id"`
 	}) (*struct {
 		Body WhoAmIResponse `json:"body"`
 	}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
-		who, err := e.WhoAmI(ctx, projectID, actorOrDefault(input.ActorID))
+		who, err := e.WhoAmI(ctx, projectID, actorID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -1296,12 +1390,15 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string            `header:"X-Actor-Id" required:"true"`
 		ProjectID string            `path:"project_id"`
 		Body      RoleChangeRequest `json:"body"`
 	}) (*struct{}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
-		if err := e.GrantRole(ctx, projectID, actorOrDefault(input.ActorID), input.Body.ActorID, input.Body.RoleID); err != nil {
+		if err := e.GrantRole(ctx, projectID, actorID, input.Body.ActorID, input.Body.RoleID); err != nil {
 			return nil, handleError(err)
 		}
 		return &struct{}{}, nil
@@ -1321,12 +1418,15 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string            `header:"X-Actor-Id" required:"true"`
 		ProjectID string            `path:"project_id"`
 		Body      RoleChangeRequest `json:"body"`
 	}) (*struct{}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
-		if err := e.RevokeRole(ctx, projectID, actorOrDefault(input.ActorID), input.Body.ActorID, input.Body.RoleID); err != nil {
+		if err := e.RevokeRole(ctx, projectID, actorID, input.Body.ActorID, input.Body.RoleID); err != nil {
 			return nil, handleError(err)
 		}
 		return &struct{}{}, nil
@@ -1346,12 +1446,15 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string                      `header:"X-Actor-Id" required:"true"`
 		ProjectID string                      `path:"project_id"`
 		Body      AttestationAuthorityRequest `json:"body"`
 	}) (*struct{}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
-		if err := e.AllowAttestationRole(ctx, projectID, actorOrDefault(input.ActorID), input.Body.Kind, input.Body.RoleID); err != nil {
+		if err := e.AllowAttestationRole(ctx, projectID, actorID, input.Body.Kind, input.Body.RoleID); err != nil {
 			return nil, handleError(err)
 		}
 		return &struct{}{}, nil
@@ -1371,12 +1474,15 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
-		ActorID   string                      `header:"X-Actor-Id" required:"true"`
 		ProjectID string                      `path:"project_id"`
 		Body      AttestationAuthorityRequest `json:"body"`
 	}) (*struct{}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
-		if err := e.DenyAttestationRole(ctx, projectID, actorOrDefault(input.ActorID), input.Body.Kind, input.Body.RoleID); err != nil {
+		if err := e.DenyAttestationRole(ctx, projectID, actorID, input.Body.Kind, input.Body.RoleID); err != nil {
 			return nil, handleError(err)
 		}
 		return &struct{}{}, nil
@@ -1529,14 +1635,6 @@ func taskValidationStatus(ctx context.Context, r repo.Repo, t domain.Task) (Vali
 		resp.Satisfied = true
 	}
 	return resp, nil
-}
-
-func actorOrDefault(id string) string {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return "local-user"
-	}
-	return id
 }
 
 func projectFromPathOrHeader(ctx context.Context, pathProjectID, fallback string) string {

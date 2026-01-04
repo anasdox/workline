@@ -51,13 +51,17 @@ class ProoflineClient:
         self,
         base_url: str,
         project_id: str,
-        actor_id: str = "local-user",
+        actor_id: Optional[str] = None,
+        api_key: Optional[str] = None,
+        access_token: Optional[str] = None,
         session: Optional[requests.Session] = None,
         timeout: float = 10.0,
     ):
         self.base_url = base_url.rstrip("/")
         self.project_id = project_id
         self.actor_id = actor_id
+        self.api_key = api_key
+        self.access_token = access_token
         self.session = session or requests.Session()
         self.timeout = timeout
 
@@ -65,7 +69,13 @@ class ProoflineClient:
         return urllib.parse.urljoin(self.base_url, f"/v0/projects/{self.project_id}/{suffix}")
 
     def _request(self, method: str, url: str, body: Optional[Dict[str, Any]] = None):
-        headers = {"Content-Type": "application/json", "X-Actor-Id": self.actor_id}
+        headers = {"Content-Type": "application/json"}
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
+        elif self.api_key:
+            headers["X-Api-Key"] = self.api_key
+        elif self.actor_id:
+            headers["X-Actor-Id"] = self.actor_id
         data = json.dumps(body) if body is not None else None
         resp = self.session.request(method, url, data=data, headers=headers, timeout=self.timeout)
         if resp.status_code >= 300:

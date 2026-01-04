@@ -6,27 +6,50 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"proofline/internal/config"
 	"proofline/internal/db"
+	"proofline/internal/domain"
 	"proofline/internal/engine"
 	"proofline/internal/migrate"
+	"proofline/internal/repo"
 )
 
+type authContext struct {
+	bearerToken string
+	apiKey      string
+}
+
+var clientAuth sync.Map
+
 type testServer struct {
-	URL    string
-	client *http.Client
-	close  func()
+	URL       string
+	client    *http.Client
+	jwtSecret string
+	apiKey    string
+	close     func()
 }
 
 func (s *testServer) Client() *http.Client { return s.client }
 func (s *testServer) Close()               { s.close() }
+func (s *testServer) bearerToken(t *testing.T, actor string, expiresAt time.Time) string {
+	return signToken(t, s.jwtSecret, actor, expiresAt)
+}
 
 func newTestServer(t *testing.T) (*testServer, func()) {
+	return newTestServerWithAuth(t, AuthConfig{JWTSecret: "test-secret"})
+}
+
+func newTestServerWithAuth(t *testing.T, authCfg AuthConfig) (*testServer, func()) {
 	t.Helper()
 	defer func() {
 		if r := recover(); r != nil {
@@ -49,6 +72,11 @@ func newTestServer(t *testing.T) (*testServer, func()) {
 	if err := migrate.Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	jwtSecret := authCfg.JWTSecret
+	if jwtSecret == "" {
+		jwtSecret = "test-secret"
+		authCfg.JWTSecret = jwtSecret
+	}
 	e := engine.New(conn, cfg)
 	if _, err := e.InitProject(context.Background(), cfg.Project.ID, "", "tester"); err != nil {
 		t.Fatalf("init project: %v", err)
@@ -56,17 +84,30 @@ func newTestServer(t *testing.T) (*testServer, func()) {
 	if err := e.Repo.UpsertProjectConfig(context.Background(), cfg.Project.ID, cfg); err != nil {
 		t.Fatalf("seed project config: %v", err)
 	}
-	handler, err := New(Config{Engine: e, BasePath: "/v0"})
+	apiKeyValue := "test-api-key"
+	if err := e.Repo.InsertAPIKey(context.Background(), nil, domain.APIKey{
+		ID:      "test-key",
+		ActorID: "tester",
+		KeyHash: repo.HashAPIKey(apiKeyValue),
+	}); err != nil {
+		t.Fatalf("insert api key: %v", err)
+	}
+	handler, err := New(Config{Engine: e, BasePath: "/v0", Auth: authCfg})
 	if err != nil {
 		t.Fatalf("build handler: %v", err)
 	}
 	ts := httptest.NewServer(handler)
+	defaultToken := signToken(t, jwtSecret, "tester", time.Now().Add(time.Hour))
+	clientAuth.Store(ts.Client(), authContext{bearerToken: defaultToken, apiKey: apiKeyValue})
 	testSrv := &testServer{
-		URL:    ts.URL,
-		client: ts.Client(),
+		URL:       ts.URL,
+		client:    ts.Client(),
+		jwtSecret: jwtSecret,
+		apiKey:    apiKeyValue,
 		close: func() {
 			ts.Close()
 			conn.Close()
+			clientAuth.Delete(ts.Client())
 		},
 	}
 	return testSrv, func() { testSrv.Close() }
@@ -83,6 +124,23 @@ func fetchOpenAPISpec(t *testing.T, srv *testServer) map[string]any {
 		t.Fatalf("unmarshal openapi: %v", err)
 	}
 	return spec
+}
+
+func signToken(t *testing.T, secret, actorID string, expiresAt time.Time) string {
+	t.Helper()
+	now := time.Now()
+	claims := jwt.RegisteredClaims{
+		Subject:   actorID,
+		ExpiresAt: jwt.NewNumericDate(expiresAt),
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	return signed
 }
 
 func assertResponseDocumented(t *testing.T, spec map[string]any, path, method, code string) {
@@ -128,8 +186,17 @@ func doJSON(t *testing.T, client *http.Client, method, url string, body any, hea
 	if headers == nil {
 		headers = map[string]string{}
 	}
-	if _, ok := headers["X-Actor-Id"]; !ok && method != http.MethodGet {
-		headers["X-Actor-Id"] = "tester"
+	_, hasAuth := headers["Authorization"]
+	_, hasAPIKey := headers["X-Api-Key"]
+	if !hasAuth && !hasAPIKey {
+		if v, ok := clientAuth.Load(client); ok {
+			auth := v.(authContext)
+			if auth.bearerToken != "" {
+				headers["Authorization"] = "Bearer " + auth.bearerToken
+			} else if auth.apiKey != "" {
+				headers["X-Api-Key"] = auth.apiKey
+			}
+		}
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -144,6 +211,147 @@ func doJSON(t *testing.T, client *http.Client, method, url string, body any, hea
 		t.Fatalf("read body: %v", err)
 	}
 	return res, data
+}
+
+func bearerHeader(token string) map[string]string {
+	return map[string]string{"Authorization": "Bearer " + token}
+}
+
+func TestAuthBearerToken(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	client := srv.Client()
+
+	token := srv.bearerToken(t, "jwt-user", time.Now().Add(time.Hour))
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/proofline/me/permissions", nil, bearerHeader(token))
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("whoami via bearer: %d %s", res.StatusCode, string(data))
+	}
+	var who struct {
+		ActorID string `json:"actor_id"`
+	}
+	_ = json.Unmarshal(data, &who)
+	if who.ActorID != "jwt-user" {
+		t.Fatalf("expected actor jwt-user, got %s", who.ActorID)
+	}
+}
+
+func TestAuthBearerInvalidAndExpired(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	client := srv.Client()
+
+	badRes, badBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, map[string]string{"Authorization": "Bearer notatoken"})
+	if badRes.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("invalid token status %d: %s", badRes.StatusCode, string(badBody))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(badBody, &apiErr)
+	if apiErr.Error.Code != "invalid_credentials" {
+		t.Fatalf("unexpected code %s", apiErr.Error.Code)
+	}
+
+	expired := srv.bearerToken(t, "jwt-user", time.Now().Add(-time.Hour))
+	expRes, expBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, bearerHeader(expired))
+	if expRes.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expired token status %d: %s", expRes.StatusCode, string(expBody))
+	}
+	_ = json.Unmarshal(expBody, &apiErr)
+	if apiErr.Error.Code != "invalid_credentials" {
+		t.Fatalf("unexpected code %s", apiErr.Error.Code)
+	}
+}
+
+func TestAuthAPIKey(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/proofline/me/permissions", nil, map[string]string{"X-Api-Key": srv.apiKey, "Authorization": ""})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("api key whoami status %d: %s", res.StatusCode, string(data))
+	}
+	var who struct {
+		ActorID string `json:"actor_id"`
+	}
+	_ = json.Unmarshal(data, &who)
+	if who.ActorID != "tester" {
+		t.Fatalf("expected actor tester, got %s", who.ActorID)
+	}
+
+	badRes, badBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, map[string]string{"X-Api-Key": "nope", "Authorization": ""})
+	if badRes.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("bad api key status %d: %s", badRes.StatusCode, string(badBody))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(badBody, &apiErr)
+	if apiErr.Error.Code != "invalid_credentials" {
+		t.Fatalf("unexpected code %s", apiErr.Error.Code)
+	}
+}
+
+func TestAuthMissing(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, map[string]string{"Authorization": ""})
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("missing auth status %d: %s", res.StatusCode, string(data))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(data, &apiErr)
+	if apiErr.Error.Code != "unauthorized" {
+		t.Fatalf("unexpected code %s", apiErr.Error.Code)
+	}
+
+	healthRes, healthBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/health", nil, map[string]string{"Authorization": ""})
+	if healthRes.StatusCode != http.StatusOK {
+		t.Fatalf("health expected 200, got %d: %s", healthRes.StatusCode, string(healthBody))
+	}
+}
+
+func TestAuthLegacyHeader(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, map[string]string{"X-Actor-Id": "legacy-user", "Authorization": ""})
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("legacy without flag status %d: %s", res.StatusCode, string(data))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(data, &apiErr)
+	if apiErr.Error.Code != "unauthorized" {
+		t.Fatalf("unexpected code %s", apiErr.Error.Code)
+	}
+
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	srvLegacy, cleanupLegacy := newTestServerWithAuth(t, AuthConfig{JWTSecret: "test-secret", AllowLegacyActorHeader: true, Logger: logger})
+	defer cleanupLegacy()
+	res2, data2 := doJSON(t, srvLegacy.Client(), http.MethodGet, srvLegacy.URL+"/v0/projects/proofline/me/permissions", nil, map[string]string{"X-Actor-Id": "legacy-user", "Authorization": ""})
+	if res2.StatusCode != http.StatusOK {
+		t.Fatalf("legacy with flag status %d: %s", res2.StatusCode, string(data2))
+	}
+	var who struct {
+		ActorID string `json:"actor_id"`
+	}
+	_ = json.Unmarshal(data2, &who)
+	if who.ActorID != "legacy-user" {
+		t.Fatalf("expected legacy actor, got %s", who.ActorID)
+	}
+	if !strings.Contains(buf.String(), "legacy") {
+		t.Fatalf("expected legacy warning log, got %q", buf.String())
+	}
 }
 
 func TestEmptyPaginationArrays(t *testing.T) {
@@ -262,11 +470,11 @@ func TestNullArrayRequestsRejected(t *testing.T) {
 	}
 
 	decRes, decData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/decisions", map[string]any{
-		"id":          "dec-bad",
-		"title":       "Bad",
-		"decision":    "none",
-		"decider_id":  "cto",
-		"rationale":   nil,
+		"id":           "dec-bad",
+		"title":        "Bad",
+		"decision":     "none",
+		"decider_id":   "cto",
+		"rationale":    nil,
 		"alternatives": nil,
 	}, nil)
 	if decRes.StatusCode != http.StatusBadRequest {
@@ -437,7 +645,8 @@ func TestLeaseConflict(t *testing.T) {
 	if claim1.StatusCode != http.StatusOK {
 		t.Fatalf("first claim: %d %s", claim1.StatusCode, string(body1))
 	}
-	claim2, body2 := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+created.ID+"/claim", nil, map[string]string{"X-Actor-Id": "other"})
+	claim2Token := srv.bearerToken(t, "other", time.Now().Add(time.Hour))
+	claim2, body2 := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+created.ID+"/claim", nil, bearerHeader(claim2Token))
 	if claim2.StatusCode != http.StatusConflict {
 		t.Fatalf("expected conflict, got %d %s", claim2.StatusCode, string(body2))
 	}
@@ -497,7 +706,7 @@ func TestUnauthorizedTaskCreate(t *testing.T) {
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Should fail",
 		"type":  "technical",
-	}, map[string]string{"X-Actor-Id": "intruder"})
+	}, bearerHeader(srv.bearerToken(t, "intruder", time.Now().Add(time.Hour))))
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", res.StatusCode, string(data))
 	}
@@ -543,7 +752,7 @@ func TestUnauthorizedAttestationKind(t *testing.T) {
 		"entity_kind": "task",
 		"entity_id":   task.ID,
 		"kind":        "security.ok",
-	}, map[string]string{"X-Actor-Id": "rev1"})
+	}, bearerHeader(srv.bearerToken(t, "rev1", time.Now().Add(time.Hour))))
 	if attRes.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", attRes.StatusCode, string(attData))
 	}
@@ -564,7 +773,7 @@ func TestWhoAmIResponsesHaveArrays(t *testing.T) {
 	projectID := "proofline"
 	client := srv.Client()
 
-	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/me/permissions", nil, map[string]string{"X-Actor-Id": "tester"})
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/me/permissions", nil, nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("whoami status %d: %s", res.StatusCode, string(data))
 	}
@@ -616,9 +825,9 @@ func TestTreeChildrenIncludedForLeaves(t *testing.T) {
 		t.Fatalf("create parent: %d %s", parentRes.StatusCode, string(parentBody))
 	}
 	childRes, childBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
-		"id":       "child-1",
-		"title":    "Child task",
-		"type":     "technical",
+		"id":        "child-1",
+		"title":     "Child task",
+		"type":      "technical",
 		"parent_id": "parent-1",
 	}, nil)
 	if childRes.StatusCode != http.StatusCreated {
@@ -715,7 +924,8 @@ func TestRoleGrantAllowsClaim(t *testing.T) {
 		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
 	}
 
-	claimRes, claimData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/claim", nil, map[string]string{"X-Actor-Id": "dev-1"})
+	devToken := srv.bearerToken(t, "dev-1", time.Now().Add(time.Hour))
+	claimRes, claimData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/claim", nil, bearerHeader(devToken))
 	if claimRes.StatusCode != http.StatusOK {
 		t.Fatalf("claim failed: %d %s", claimRes.StatusCode, string(claimData))
 	}
@@ -747,7 +957,7 @@ func TestForceRequiresPermission(t *testing.T) {
 
 	doneRes, doneData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/done?force=true", map[string]any{
 		"work_proof": map[string]any{"note": "force"},
-	}, map[string]string{"X-Actor-Id": "force-dev"})
+	}, bearerHeader(srv.bearerToken(t, "force-dev", time.Now().Add(time.Hour))))
 	if doneRes.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", doneRes.StatusCode, string(doneData))
 	}

@@ -14,11 +14,14 @@ import (
 
 // Client is a minimal Proofline HTTP API client.
 type Client struct {
-	BaseURL    string
-	ProjectID  string
-	ActorID    string
-	HTTPClient *http.Client
-	Timeout    time.Duration
+	BaseURL   string
+	ProjectID string
+	// ActorID is deprecated and only used when legacy auth is enabled on the server.
+	ActorID     string
+	APIKey      string
+	BearerToken string
+	HTTPClient  *http.Client
+	Timeout     time.Duration
 }
 
 // New creates a client with sane defaults.
@@ -26,7 +29,6 @@ func New(baseURL, projectID string) *Client {
 	return &Client{
 		BaseURL:   baseURL,
 		ProjectID: projectID,
-		ActorID:   "local-user",
 		Timeout:   10 * time.Second,
 	}
 }
@@ -143,7 +145,12 @@ func (c *Client) do(ctx context.Context, method, endpoint string, body any, out 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if c.ActorID != "" {
+	switch {
+	case c.BearerToken != "":
+		req.Header.Set("Authorization", "Bearer "+c.BearerToken)
+	case c.APIKey != "":
+		req.Header.Set("X-Api-Key", c.APIKey)
+	case c.ActorID != "":
 		req.Header.Set("X-Actor-Id", c.ActorID)
 	}
 	resp, err := c.HTTPClient.Do(req)

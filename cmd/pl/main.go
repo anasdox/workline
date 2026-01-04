@@ -1048,7 +1048,17 @@ func serveCmd() *cobra.Command {
 				return err
 			}
 			e := engine.New(conn, cfg)
-			handler, err := server.New(server.Config{Engine: e, BasePath: basePath})
+			authCfg := server.AuthConfig{
+				JWTSecret: os.Getenv("JWT_SECRET"),
+			}
+			allowLegacy := os.Getenv("ALLOW_LEGACY_ACTOR_HEADER")
+			if strings.EqualFold(allowLegacy, "true") || allowLegacy == "1" {
+				authCfg.AllowLegacyActorHeader = true
+			}
+			if authCfg.JWTSecret == "" {
+				return fmt.Errorf("JWT_SECRET is required for bearer auth")
+			}
+			handler, err := server.New(server.Config{Engine: e, BasePath: basePath, Auth: authCfg})
 			if err != nil {
 				return err
 			}

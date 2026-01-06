@@ -7,12 +7,12 @@ AI agents that manage projects through text alone easily lose structure and cont
 Too often, “done” is just a checkbox: tasks get marked complete without proof, policies are tribal knowledge, and quality gates are easy to forget. Proofline makes “done” and “ready” explicit by attaching attestations (proof) and enforcing policies automatically. It keeps evidence, rules, and history in one place so teams—and agents—ship with confidence instead of guesswork.
 
 
-Proofline stores all state in SQLite at `.proofline/proofline.db`. Project configs (attestations + policies) live in the DB; you can import from `.proofline/proofline.yml` if you want to override defaults.
+Proofline stores all state in SQLite at `.proofline/proofline.db`. Project configs (attestations + policies) live in the DB; `proofline.example.yml` shows a sample config you can import.
 
 Core Concepts (explained simply)
 --------------------------------
 - Why attestations and policy-driven validation matter: they keep "done" honest. Attestations are proof stickers (tests passed, review approved); policies say which stickers are required before a task or iteration can finish, so quality is enforced automatically instead of by memory.
-- Workspace: the `.proofline/` folder is your toy box; it holds the database and `proofline.yml` rules every command uses. Example: running `pl init --project-id myproj` builds this box.
+- Workspace: the `.proofline/` folder is your toy box; it holds only the database. The optional `proofline.yml` lives in the workspace root. The DB is created automatically on first command if missing.
 - Project: the one big game you are playing in this workspace. Everything—iterations, tasks, evidence—belongs to this project.
 - Policy presets (`policies.presets`): ready-made rules that say which proof is needed. Think: "before dessert you must finish veggies." Example: preset `high` might require `ci.passed`, `review.approved`, and `security.ok`.
 - Definition of Ready (DoR): proof that a task is ready to start (e.g., `requirements.accepted`, `design.reviewed`, `scope.groomed`). Use the `ready` preset to gate work.
@@ -31,17 +31,16 @@ Build / Install
 
 Initialization
 --------------
-- Run `pl init --project-id <id>` to create the workspace, database, and default config.
-- Default config (editable) is generated with:
+- Nothing to run up front. The database at `.proofline/proofline.db` is created on demand when you run a command.
+- Initial config is seeded into the DB on first use with:
   - Attestation catalog entries for readiness and done checks: `requirements.accepted`, `design.reviewed`, `scope.groomed`, `ci.passed`, `review.approved`, `acceptance.passed`, `security.ok`, `iteration.approved`.
   - Policy presets: `ready` (DoR), `done.standard`, `done.bugfix`, plus `low/medium/high`.
   - Task defaults map to DoD presets (`feature`→`done.standard`, `bug`→`done.bugfix`, etc.), and iteration validation requires `iteration.approved`.
-- `pl init` records events `project.init` and `config.created`.
 
 Configuration
 -------------
 - Project configs live in the DB. If no config exists for a project, a default is auto-seeded.
-- You can import overrides from a YAML file: `pl project config import --file .proofline/proofline.yml`.
+- You can import overrides from a YAML file: `pl project config import --file proofline.example.yml` (or any file you choose).
 - Inspect/validate: `pl config show` and `pl config validate` (or `--json`).
 - Project selection: `--project` overrides; else config file project_id if present; else the single project in DB. Config seeding happens only when the project has no stored config.
 - Default policies are applied automatically on task creation based on `policies.defaults.task.<type>` unless overridden with `--policy` or explicit validation flags (`--validation-mode`, `--require`, `--threshold`), which emit `policy.override`.
@@ -50,7 +49,7 @@ Configuration
 Quick Start
 -----------
 ```sh
-pl init --project-id myproj --description "Demo project"
+pl project config import --file proofline.example.yml      # optional: sync sample config into DB
 pl config show
 pl iteration create --id iter-1 --goal "Ship MVP"
 pl task create --type feature --title "Implement auth"
@@ -61,6 +60,11 @@ pl attest add --entity-kind task --entity-id <task-id> --kind ci.passed
 pl task done <task-id> --work-proof-json '{"notes":"implemented and tested"}'
 pl log tail
 ```
+
+Local bootstrap
+---------------
+- One-shot setup (deps + optional config import): `./scripts/bootstrap.sh` (set `CONFIG_FILE=proofline.example.yml` to import; override workspace with `WORKSPACE`).
+- With `just` installed: `just` (runs `bootstrap` by default), then `just test|fmt|tidy|serve`.
 
 Common Commands
 ---------------

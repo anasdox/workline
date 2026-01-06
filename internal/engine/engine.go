@@ -26,6 +26,8 @@ type Engine struct {
 	Auth   auth.Service
 }
 
+const defaultOrgID = "default-org"
+
 func New(db *sql.DB, cfg *config.Config) Engine {
 	return Engine{
 		DB:     db,
@@ -52,22 +54,35 @@ func (e Engine) InitProject(ctx context.Context, projectID, description, actorID
 	}
 	defer tx.Rollback()
 
+	orgID := defaultOrgID
 	p := domain.Project{
 		ID:          projectID,
+		OrgID:       orgID,
 		Kind:        "software-project",
 		Status:      "active",
 		Description: description,
 		CreatedAt:   e.now().UTC().Format(time.RFC3339),
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO projects(id,kind,status,description,created_at) VALUES (?,?,?,?,?)`,
-		p.ID, p.Kind, p.Status, nullable(p.Description), p.CreatedAt); err != nil {
+	if err := e.Repo.EnsureOrg(ctx, tx, orgID, "Default Org", p.CreatedAt); err != nil {
+		return domain.Project{}, fmt.Errorf("insert org: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO projects(id,org_id,kind,status,description,created_at) VALUES (?,?,?,?,?,?)`,
+		p.ID, p.OrgID, p.Kind, p.Status, nullable(p.Description), p.CreatedAt); err != nil {
 		return domain.Project{}, fmt.Errorf("insert project: %w", err)
 	}
-	if err := e.Repo.UpsertProjectConfigTx(ctx, tx, p.ID, config.Default(p.ID)); err != nil {
+	seedCfg := e.Config
+	if seedCfg == nil {
+		seedCfg = config.Default(p.ID)
+	}
+	seedCfg.Project.ID = p.ID
+	if err := e.Repo.UpsertProjectConfigTx(ctx, tx, p.ID, seedCfg); err != nil {
 		return domain.Project{}, fmt.Errorf("insert project config: %w", err)
 	}
 	if err := e.seedRBAC(ctx, tx, p.ID, actorID); err != nil {
 		return domain.Project{}, err
+	}
+	if err := e.Repo.AssignOrgRole(ctx, tx, orgID, actorID, "owner"); err != nil {
+		return domain.Project{}, fmt.Errorf("assign org role: %w", err)
 	}
 	if err := e.Events.Append(ctx, tx, "project.init", p.ID, "project", p.ID, actorID, events.EventPayload{"status": p.Status}); err != nil {
 		return domain.Project{}, err

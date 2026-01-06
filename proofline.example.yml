@@ -1,0 +1,60 @@
+project:
+  id: example
+  kind: software-project
+
+attestations:
+  catalog:
+    requirements.accepted:
+      description: "Team agreed on scope and requirements"
+    design.reviewed:
+      description: "Solution/design reviewed"
+    scope.groomed:
+      description: "Task is sized, dependencies known"
+    ci.passed:
+      description: "CI pipeline completed successfully"
+    review.approved:
+      description: "Code review approved"
+    acceptance.passed:
+      description: "Acceptance criteria validated"
+    security.ok:
+      description: "Security checks passed"
+    iteration.approved:
+      description: "Iteration approved"
+
+policies:
+  presets:
+    ready:
+      mode: all
+      require: [requirements.accepted, design.reviewed, scope.groomed]
+
+    done.standard:
+      mode: all
+      require: [ci.passed, review.approved, acceptance.passed]
+
+    done.bugfix:
+      mode: all
+      require: [ci.passed, review.approved]
+
+    low:
+      mode: any
+      require: [ci.passed, review.approved]
+
+    medium:
+      mode: all
+      require: [ci.passed, review.approved]
+
+    high:
+      mode: all
+      require: [ci.passed, review.approved, security.ok]
+
+  defaults:
+    task:
+      feature: done.standard
+      bug: done.bugfix
+      technical: done.standard
+      docs: low
+      chore: low
+
+    iteration:
+      validation:
+        require: iteration.approved

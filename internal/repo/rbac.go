@@ -10,6 +10,19 @@ func (r Repo) EnsureActor(ctx context.Context, tx *sql.Tx, actorID string, now s
 	return err
 }
 
+func (r Repo) EnsureOrg(ctx context.Context, tx *sql.Tx, orgID, name, now string) error {
+	if name == "" {
+		name = orgID
+	}
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO organizations(id, name, created_at) VALUES (?,?,?)`, orgID, name, now)
+	return err
+}
+
+func (r Repo) AssignOrgRole(ctx context.Context, tx *sql.Tx, orgID, actorID, role string) error {
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO org_roles(org_id, actor_id, role) VALUES (?,?,?)`, orgID, actorID, role)
+	return err
+}
+
 func (r Repo) InsertRole(ctx context.Context, tx *sql.Tx, id, desc string) error {
 	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO roles(id, description) VALUES (?,?)`, id, desc)
 	return err

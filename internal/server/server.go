@@ -248,8 +248,12 @@ func applyAuthSecurity(oas *huma.OpenAPI, basePath string) {
 	}
 	oas.Security = security
 	healthPath := path.Join(basePath, "health")
+	devLoginPath := path.Join(basePath, "auth/dev/login")
 	if !strings.HasPrefix(healthPath, "/") {
 		healthPath = "/" + healthPath
+	}
+	if !strings.HasPrefix(devLoginPath, "/") {
+		devLoginPath = "/" + devLoginPath
 	}
 	for route, item := range oas.Paths {
 		for _, op := range []*huma.Operation{
@@ -259,6 +263,10 @@ func applyAuthSecurity(oas *huma.OpenAPI, basePath string) {
 				continue
 			}
 			if route == healthPath {
+				op.Security = []map[string][]string{}
+				continue
+			}
+			if route == devLoginPath {
 				op.Security = []map[string][]string{}
 				continue
 			}

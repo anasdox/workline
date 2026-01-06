@@ -129,6 +129,7 @@ func bearerToken(authz string) (string, bool) {
 func newAuthMiddleware(basePath string, cfg AuthConfig, r repo.Repo) func(http.Handler) http.Handler {
 	healthPath := path.Join(basePath, "health")
 	openapiPath := path.Join(basePath, "openapi.json")
+	devLoginPath := path.Join(basePath, "auth/dev/login")
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			// Only enforce for API base path.
@@ -141,6 +142,10 @@ func newAuthMiddleware(basePath string, cfg AuthConfig, r repo.Repo) func(http.H
 				return
 			}
 			if req.URL.Path == openapiPath {
+				next.ServeHTTP(w, req)
+				return
+			}
+			if req.URL.Path == devLoginPath {
 				next.ServeHTTP(w, req)
 				return
 			}

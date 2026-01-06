@@ -115,7 +115,7 @@ func Path(workspace string) string {
 	if workspace == "" {
 		workspace = "."
 	}
-	return filepath.Join(workspace, ".proofline", "proofline.yml")
+	return filepath.Join(workspace, "proofline.yml")
 }
 
 // GenerateDefault returns default config YAML.

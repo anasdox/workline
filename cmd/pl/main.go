@@ -30,7 +30,7 @@ var rootCmd = &cobra.Command{
 	Long: `Proofline tracks project work with attestations and policy-driven validation.
 Core concepts (kid-friendly):
 - Why it matters: attestations are proof stickers and policies are the rules; together they stop "done" from being just a checkbox and keep quality consistent without nagging.
-- Workspace: your .proofline toy box with the database and proofline.yml rules every command uses.
+- Workspace: your .proofline toy box with only the database; configs are stored in the DB and imported explicitly.
 - Project: the one big game inside that box that owns all tasks, iterations, and evidence.
 - Policies: presets say what proof a task needs (none/all/any/threshold of attestation kinds); task types map to presets by default.
 - Definition of Ready (DoR): proof stickers that say a task is ready to start (requirements accepted, design reviewed, scope groomed).
@@ -42,11 +42,8 @@ Core concepts (kid-friendly):
 - Event log: diary of changes, view with 'pl log tail'.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		workspace := viper.GetString("workspace")
-		// Ensure workspace exists for commands that touch DB
-		if cmd.Name() != "init" {
-			if _, err := db.EnsureWorkspace(workspace); err != nil {
-				return err
-			}
+		if _, err := db.EnsureWorkspace(workspace); err != nil {
+			return err
 		}
 		return nil
 	},
@@ -80,7 +77,6 @@ func addPersistentFlags() {
 }
 
 func registerCommands() {
-	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(projectCmd())
 	rootCmd.AddCommand(configCmd())
 	rootCmd.AddCommand(statusCmd())
@@ -281,46 +277,6 @@ func projectConfigImportCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&filePath, "file", "", "path to YAML config")
 	_ = cmd.MarkFlagRequired("file")
-	return cmd
-}
-
-func initCmd() *cobra.Command {
-	var projectID, description string
-	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize Proofline workspace",
-		Long:  "Set up the .proofline toy box: creates the SQLite DB, seeds default policies/attestations in the DB, and records the project so every other command has a home.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if projectID == "" {
-				return fmt.Errorf("--project-id is required")
-			}
-			workspace := viper.GetString("workspace")
-			if _, err := db.EnsureWorkspace(workspace); err != nil {
-				return err
-			}
-			cfg := config.Default(projectID)
-			conn, err := db.Open(db.Config{Workspace: workspace})
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			if err := migrate.Migrate(conn); err != nil {
-				return err
-			}
-			e := engine.New(conn, cfg)
-			p, err := e.InitProject(cmd.Context(), projectID, description, viper.GetString("actor-id"))
-			if err != nil {
-				return err
-			}
-			if err := e.Repo.UpsertProjectConfig(cmd.Context(), projectID, cfg); err != nil {
-				return err
-			}
-			printJSONOrTable(p)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&projectID, "project-id", "", "project id")
-	cmd.Flags().StringVar(&description, "description", "", "description")
 	return cmd
 }
 
@@ -1043,7 +999,7 @@ func serveCmd() *cobra.Command {
 				return err
 			}
 			r := repo.Repo{DB: conn}
-			_, cfg, err := app.ResolveProjectAndConfig(cmd.Context(), workspace, viper.GetString("project"), r)
+			_, cfg, err := app.ResolveProjectAndConfig(cmd.Context(), workspace, viper.GetString("project"), viper.GetString("actor-id"), r)
 			if err != nil {
 				return err
 			}
@@ -1111,7 +1067,7 @@ func withEngine(ctx context.Context, fn func(context.Context, engine.Engine) err
 		return err
 	}
 	r := repo.Repo{DB: conn}
-	_, cfg, err := app.ResolveProjectAndConfig(ctx, workspace, viper.GetString("project"), r)
+	_, cfg, err := app.ResolveProjectAndConfig(ctx, workspace, viper.GetString("project"), viper.GetString("actor-id"), r)
 	if err != nil {
 		return err
 	}

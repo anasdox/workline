@@ -88,6 +88,12 @@ func (r Repo) InsertIteration(ctx context.Context, it domain.Iteration) error {
 	return err
 }
 
+func (r Repo) InsertIterationTx(ctx context.Context, tx *sql.Tx, it domain.Iteration) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO iterations(id,org_id,project_id,goal,status,created_at) VALUES (?,?,?,?,?,?)`,
+		it.ID, it.OrgID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
+	return err
+}
+
 func (r Repo) UpdateProject(ctx context.Context, id, status string, description *string) error {
 	var (
 		fields []string
@@ -262,12 +268,18 @@ func (r Repo) UpdateTask(ctx context.Context, tx *sql.Tx, t domain.Task) error {
 
 func (r Repo) GetTask(ctx context.Context, id string) (domain.Task, error) {
 	var t domain.Task
-	var iterationID, parentID, assigneeID, workProof, requiredAtt, completedAt sql.NullString
+	var iterationID, parentID, assigneeID, workProof, requiredAtt, completedAt, description sql.NullString
 	var threshold sql.NullInt64
 	err := r.DB.QueryRowContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_proof_json,validation_mode,required_attestations_json,required_threshold,created_at,updated_at,completed_at FROM tasks WHERE id=?`, id).
-		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &t.Description, &t.Status, &assigneeID, &workProof, &t.ValidationMode, &requiredAtt, &threshold, &t.CreatedAt, &t.UpdatedAt, &completedAt)
+		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &workProof, &t.ValidationMode, &requiredAtt, &threshold, &t.CreatedAt, &t.UpdatedAt, &completedAt)
 	if err == sql.ErrNoRows {
 		return t, ErrNotFound
+	}
+	if err != nil {
+		return t, err
+	}
+	if description.Valid {
+		t.Description = description.String
 	}
 	if iterationID.Valid {
 		t.IterationID = &iterationID.String
@@ -297,6 +309,51 @@ func (r Repo) GetTask(ctx context.Context, id string) (domain.Task, error) {
 	}
 	t.DependsOn = deps
 	return t, err
+}
+
+func (r Repo) GetTaskTx(ctx context.Context, tx *sql.Tx, id string) (domain.Task, error) {
+	var t domain.Task
+	var iterationID, parentID, assigneeID, workProof, requiredAtt, completedAt, description sql.NullString
+	var threshold sql.NullInt64
+	err := tx.QueryRowContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_proof_json,validation_mode,required_attestations_json,required_threshold,created_at,updated_at,completed_at FROM tasks WHERE id=?`, id).
+		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &workProof, &t.ValidationMode, &requiredAtt, &threshold, &t.CreatedAt, &t.UpdatedAt, &completedAt)
+	if err == sql.ErrNoRows {
+		return t, ErrNotFound
+	}
+	if err != nil {
+		return t, err
+	}
+	if description.Valid {
+		t.Description = description.String
+	}
+	if iterationID.Valid {
+		t.IterationID = &iterationID.String
+	}
+	if parentID.Valid {
+		t.ParentID = &parentID.String
+	}
+	if assigneeID.Valid {
+		t.AssigneeID = &assigneeID.String
+	}
+	if workProof.Valid {
+		t.WorkProofJSON = &workProof.String
+	}
+	if requiredAtt.Valid {
+		t.RequiredAttestationsJSON = &requiredAtt.String
+	}
+	if threshold.Valid {
+		val := int(threshold.Int64)
+		t.RequiredThreshold = &val
+	}
+	if completedAt.Valid {
+		t.CompletedAt = &completedAt.String
+	}
+	deps, err := r.ListTaskDependenciesTx(ctx, tx, t.ID)
+	if err != nil {
+		return t, err
+	}
+	t.DependsOn = deps
+	return t, nil
 }
 
 type TaskFilters struct {
@@ -406,6 +463,23 @@ func (r Repo) ListTaskDependencies(ctx context.Context, taskID string) ([]string
 	return deps, nil
 }
 
+func (r Repo) ListTaskDependenciesTx(ctx context.Context, tx *sql.Tx, taskID string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT depends_on_task_id FROM task_deps WHERE task_id=?`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var deps []string
+	for rows.Next() {
+		var dep string
+		if err := rows.Scan(&dep); err != nil {
+			return nil, err
+		}
+		deps = append(deps, dep)
+	}
+	return deps, nil
+}
+
 func (r Repo) AddDependencies(ctx context.Context, tx *sql.Tx, taskID string, deps []string) error {
 	for _, d := range deps {
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO task_deps(task_id, depends_on_task_id) VALUES (?,?)`, taskID, d); err != nil {
@@ -426,6 +500,23 @@ func (r Repo) RemoveDependencies(ctx context.Context, tx *sql.Tx, taskID string,
 
 func (r Repo) ListChildren(ctx context.Context, taskID string) ([]string, error) {
 	rows, err := r.DB.QueryContext(ctx, `SELECT id FROM tasks WHERE parent_id=?`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (r Repo) ListChildrenTx(ctx context.Context, tx *sql.Tx, taskID string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM tasks WHERE parent_id=?`, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -534,8 +625,12 @@ func (r Repo) ListAttestations(ctx context.Context, f AttestationFilters) ([]dom
 	var res []domain.Attestation
 	for rows.Next() {
 		var a domain.Attestation
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.EntityKind, &a.EntityID, &a.Kind, &a.ActorID, &a.TS, &a.PayloadJSON); err != nil {
+		var payload sql.NullString
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.EntityKind, &a.EntityID, &a.Kind, &a.ActorID, &a.TS, &payload); err != nil {
 			return nil, err
+		}
+		if payload.Valid {
+			a.PayloadJSON = payload.String
 		}
 		res = append(res, a)
 	}
@@ -611,8 +706,12 @@ func (r Repo) LatestEventsFrom(ctx context.Context, limit int, cursor int64, pro
 	var res []domain.Event
 	for rows.Next() {
 		var e domain.Event
-		if err := rows.Scan(&e.ID, &e.TS, &e.Type, &e.ProjectID, &e.EntityKind, &e.EntityID, &e.ActorID, &e.Payload); err != nil {
+		var payload sql.NullString
+		if err := rows.Scan(&e.ID, &e.TS, &e.Type, &e.ProjectID, &e.EntityKind, &e.EntityID, &e.ActorID, &payload); err != nil {
 			return nil, err
+		}
+		if payload.Valid {
+			e.Payload = payload.String
 		}
 		res = append(res, e)
 	}
@@ -628,6 +727,12 @@ func nullableIntPtr(v *int) any {
 
 func (r Repo) InsertDecision(ctx context.Context, d domain.Decision) error {
 	_, err := r.DB.ExecContext(ctx, `INSERT INTO decisions(id,project_id,title,context_json,decision,rationale_json,alternatives_json,decider_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+		d.ID, d.ProjectID, d.Title, nullable(d.ContextJSON), d.Decision, nullable(d.RationaleJSON), nullable(d.AlternativesJSON), d.DeciderID, d.CreatedAt)
+	return err
+}
+
+func (r Repo) InsertDecisionTx(ctx context.Context, tx *sql.Tx, d domain.Decision) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO decisions(id,project_id,title,context_json,decision,rationale_json,alternatives_json,decider_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
 		d.ID, d.ProjectID, d.Title, nullable(d.ContextJSON), d.Decision, nullable(d.RationaleJSON), nullable(d.AlternativesJSON), d.DeciderID, d.CreatedAt)
 	return err
 }

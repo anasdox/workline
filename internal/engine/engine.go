@@ -114,9 +114,6 @@ type TaskCreateOptions struct {
 }
 
 func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.Task, error) {
-	if e.Config == nil {
-		return domain.Task{}, errors.New("config not loaded")
-	}
 	if opts.Type == "" {
 		opts.Type = "technical"
 	}
@@ -125,6 +122,14 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 	}
 	if opts.ProjectID == "" {
 		return domain.Task{}, errors.New("project is required")
+	}
+	cfg := e.Config
+	if cfg == nil {
+		cfgFromDB, err := e.Repo.GetProjectConfig(ctx, opts.ProjectID)
+		if err != nil {
+			return domain.Task{}, errors.New("config not loaded")
+		}
+		cfg = cfgFromDB
 	}
 	if opts.ValidationMode == "threshold" && opts.RequiredThreshold == 0 {
 		return domain.Task{}, errors.New("threshold required for validation-mode=threshold")
@@ -164,10 +169,10 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 	manualPolicy := opts.PolicyOverride
 	if !manualPolicy {
 		if presetName == "" {
-			presetName = e.Config.Policies.Defaults.Task[opts.Type]
+			presetName = cfg.Policies.Defaults.Task[opts.Type]
 		}
 		if presetName != "" {
-			preset, ok := e.Config.Policies.Presets[presetName]
+			preset, ok := cfg.Policies.Presets[presetName]
 			if !ok {
 				return domain.Task{}, fmt.Errorf("policy preset %s not found", presetName)
 			}
@@ -185,9 +190,11 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 			}
 		}
 	}
-	reqJSON, err = marshalStringSlice(opts.RequiredKinds)
-	if err != nil {
-		return domain.Task{}, err
+	if manualPolicy || presetName == "" {
+		reqJSON, err = marshalStringSlice(opts.RequiredKinds)
+		if err != nil {
+			return domain.Task{}, err
+		}
 	}
 	if opts.ValidationMode == "" {
 		opts.ValidationMode = "none"
@@ -363,6 +370,9 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 	t, err := e.Repo.GetTask(ctx, opts.ID)
 	if err != nil {
 		return t, err
+	}
+	if t.Status == "" {
+		t.Status = "planned"
 	}
 	oldPolicy := currentPolicy(t)
 	original := t
@@ -677,12 +687,12 @@ func (e Engine) ensureDependenciesDone(ctx context.Context, tx *sql.Tx, taskID, 
 	if force {
 		return nil
 	}
-	deps, err := e.Repo.ListTaskDependencies(ctx, taskID)
+	deps, err := e.Repo.ListTaskDependenciesTx(ctx, tx, taskID)
 	if err != nil {
 		return err
 	}
 	for _, d := range deps {
-		t, err := e.Repo.GetTask(ctx, d)
+		t, err := e.Repo.GetTaskTx(ctx, tx, d)
 		if err != nil {
 			return err
 		}
@@ -700,12 +710,12 @@ func (e Engine) ensureSubtasksDone(ctx context.Context, tx *sql.Tx, taskID strin
 	if force {
 		return nil
 	}
-	children, err := e.Repo.ListChildren(ctx, taskID)
+	children, err := e.Repo.ListChildrenTx(ctx, tx, taskID)
 	if err != nil {
 		return err
 	}
 	for _, c := range children {
-		t, err := e.Repo.GetTask(ctx, c)
+		t, err := e.Repo.GetTaskTx(ctx, tx, c)
 		if err != nil {
 			return err
 		}
@@ -866,7 +876,7 @@ func (e Engine) CreateIteration(ctx context.Context, it domain.Iteration, actorI
 	if err := e.requirePermission(ctx, tx, it.ProjectID, actorID, "iteration.create"); err != nil {
 		return it, err
 	}
-	if err := e.Repo.InsertIteration(ctx, it); err != nil {
+	if err := e.Repo.InsertIterationTx(ctx, tx, it); err != nil {
 		return it, err
 	}
 	if err := e.Events.Append(ctx, tx, "iteration.created", it.ProjectID, "iteration", it.ID, actorID, events.EventPayload{"status": it.Status}); err != nil {
@@ -995,7 +1005,7 @@ func (e Engine) CreateDecision(ctx context.Context, d domain.Decision, actorID s
 	if err := e.requirePermission(ctx, tx, d.ProjectID, actorID, "decision.create"); err != nil {
 		return d, err
 	}
-	if err := e.Repo.InsertDecision(ctx, d); err != nil {
+	if err := e.Repo.InsertDecisionTx(ctx, tx, d); err != nil {
 		return d, err
 	}
 	if err := e.Events.Append(ctx, tx, "decision.created", d.ProjectID, "decision", d.ID, actorID, events.EventPayload{"title": d.Title}); err != nil {
@@ -1231,15 +1241,28 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 	}
 	permDescs := map[string]string{
 		"project.create":       "Create project",
+		"project.list":         "List projects",
+		"project.read":         "Read project",
+		"project.update":       "Update project",
+		"project.delete":       "Delete project",
+		"project.config.read":  "Read project config",
+		"project.status.read":  "Read project status",
+		"project.events.read":  "Read project events",
 		"task.create":          "Create task",
+		"task.list":            "List tasks",
+		"task.read":            "Read task",
+		"task.tree":            "Read task tree",
+		"task.validation.read": "Read task validation",
 		"task.update":          "Update task",
 		"task.done":            "Complete task",
 		"task.claim":           "Claim task",
 		"task.release":         "Release task",
 		"iteration.create":     "Create iteration",
+		"iteration.list":       "List iterations",
 		"iteration.set_status": "Update iteration status",
 		"decision.create":      "Create decision",
 		"attestation.add":      "Add attestation",
+		"attestation.list":     "List attestations",
 		"rbac.manage":          "Manage RBAC",
 		"force.use":            "Use force flag",
 	}
@@ -1248,16 +1271,29 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 			return err
 		}
 	}
+	readPerms := []string{
+		"project.list",
+		"project.read",
+		"project.config.read",
+		"project.status.read",
+		"project.events.read",
+		"task.list",
+		"task.read",
+		"task.tree",
+		"task.validation.read",
+		"iteration.list",
+		"attestation.list",
+	}
 	rolePerms := map[string][]string{
 		"owner":    keys(permDescs),
-		"pm":       {"task.create", "task.update", "iteration.create", "iteration.set_status", "decision.create", "attestation.add"},
-		"po":       {"task.create", "task.update", "attestation.add"},
-		"dev":      {"task.claim", "task.update", "task.done", "task.release"},
-		"reviewer": {"attestation.add"},
-		"qa":       {"attestation.add"},
-		"security": {"attestation.add"},
-		"release":  {"iteration.set_status", "attestation.add", "force.use"},
-		"observer": {},
+		"pm":       append(append([]string{}, readPerms...), "task.create", "task.update", "iteration.create", "iteration.set_status", "decision.create", "attestation.add"),
+		"po":       append(append([]string{}, readPerms...), "task.create", "task.update", "attestation.add"),
+		"dev":      append(append([]string{}, readPerms...), "task.claim", "task.update", "task.done", "task.release"),
+		"reviewer": append(append([]string{}, readPerms...), "attestation.add"),
+		"qa":       append(append([]string{}, readPerms...), "attestation.add"),
+		"security": append(append([]string{}, readPerms...), "attestation.add"),
+		"release":  append(append([]string{}, readPerms...), "iteration.set_status", "attestation.add", "force.use"),
+		"observer": append([]string{}, readPerms...),
 	}
 	for role, perms := range rolePerms {
 		for _, p := range perms {

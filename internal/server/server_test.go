@@ -226,12 +226,32 @@ func bearerHeader(token string) map[string]string {
 	return map[string]string{"Authorization": "Bearer " + token}
 }
 
+func assertForbiddenPermission(t *testing.T, res *http.Response, data []byte, perm string) {
+	t.Helper()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 for %s, got %d: %s", perm, res.StatusCode, string(data))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	if err := json.Unmarshal(data, &apiErr); err != nil {
+		t.Fatalf("unmarshal error response: %v", err)
+	}
+	if apiErr.Error.Code != "forbidden" {
+		t.Fatalf("unexpected error code %s for %s", apiErr.Error.Code, perm)
+	}
+	got, ok := apiErr.Error.Details["permission"]
+	if !ok || got != perm {
+		t.Fatalf("expected permission %s, got %#v", perm, apiErr.Error.Details["permission"])
+	}
+}
+
 func TestAuthBearerToken(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
 	client := srv.Client()
 
-token := srv.bearerToken(t, "jwt-user", "default-org", time.Now().Add(time.Hour))
+	token := srv.bearerToken(t, "jwt-user", "default-org", time.Now().Add(time.Hour))
 	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/workline/me/permissions", nil, bearerHeader(token))
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("whoami via bearer: %d %s", res.StatusCode, string(data))
@@ -262,7 +282,7 @@ func TestAuthBearerInvalidAndExpired(t *testing.T) {
 		t.Fatalf("unexpected code %s", apiErr.Error.Code)
 	}
 
-expired := srv.bearerToken(t, "jwt-user", "default-org", time.Now().Add(-time.Hour))
+	expired := srv.bearerToken(t, "jwt-user", "default-org", time.Now().Add(-time.Hour))
 	expRes, expBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, bearerHeader(expired))
 	if expRes.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expired token status %d: %s", expRes.StatusCode, string(expBody))
@@ -323,6 +343,65 @@ func TestAuthMissing(t *testing.T) {
 	healthRes, healthBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/health", nil, map[string]string{"Authorization": ""})
 	if healthRes.StatusCode != http.StatusOK {
 		t.Fatalf("health expected 200, got %d: %s", healthRes.StatusCode, string(healthBody))
+	}
+}
+
+func TestPermissionGates(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "workline"
+	client := srv.Client()
+
+	createProjectRes, createProjectBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects", map[string]any{
+		"id": "perm-project",
+	}, nil)
+	if createProjectRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create project: %d %s", createProjectRes.StatusCode, string(createProjectBody))
+	}
+
+	taskRes, taskBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Perm test task",
+		"type":  "technical",
+	}, nil)
+	if taskRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", taskRes.StatusCode, string(taskBody))
+	}
+	var createdTask TaskResponse
+	if err := json.Unmarshal(taskBody, &createdTask); err != nil {
+		t.Fatalf("unmarshal task: %v", err)
+	}
+
+	intruderToken := srv.bearerToken(t, "intruder", "default-org", time.Now().Add(time.Hour))
+	headers := bearerHeader(intruderToken)
+
+	cases := []struct {
+		name string
+		meth string
+		url  string
+		body any
+		perm string
+	}{
+		{"project list", http.MethodGet, srv.URL + "/v0/projects", nil, "project.list"},
+		{"project create", http.MethodPost, srv.URL + "/v0/projects", map[string]any{"id": "blocked-project"}, "project.create"},
+		{"project read", http.MethodGet, srv.URL + "/v0/projects/perm-project", nil, "project.read"},
+		{"project update", http.MethodPatch, srv.URL + "/v0/projects/perm-project", map[string]any{"description": "blocked"}, "project.update"},
+		{"project delete", http.MethodDelete, srv.URL + "/v0/projects/perm-project", nil, "project.delete"},
+		{"project config", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/config", nil, "project.config.read"},
+		{"project status", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/status", nil, "project.status.read"},
+		{"project events", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/events", nil, "project.events.read"},
+		{"task list", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks", nil, "task.list"},
+		{"task read", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks/" + createdTask.ID, nil, "task.read"},
+		{"task tree", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks/tree", nil, "task.tree"},
+		{"task validation", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks/" + createdTask.ID + "/validation", nil, "task.validation.read"},
+		{"iteration list", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/iterations", nil, "iteration.list"},
+		{"attestation list", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/attestations", nil, "attestation.list"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			res, data := doJSON(t, client, tc.meth, tc.url, tc.body, headers)
+			assertForbiddenPermission(t, res, data, tc.perm)
+		})
 	}
 }
 
@@ -617,7 +696,14 @@ func TestLeaseConflict(t *testing.T) {
 	if claim1.StatusCode != http.StatusOK {
 		t.Fatalf("first claim: %d %s", claim1.StatusCode, string(body1))
 	}
-claim2Token := srv.bearerToken(t, "other", "default-org", time.Now().Add(time.Hour))
+	grantRes, grantData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/rbac/roles/grant", map[string]any{
+		"actor_id": "other",
+		"role_id":  "dev",
+	}, nil)
+	if grantRes.StatusCode != http.StatusOK && grantRes.StatusCode != http.StatusNoContent {
+		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
+	}
+	claim2Token := srv.bearerToken(t, "other", "default-org", time.Now().Add(time.Hour))
 	claim2, body2 := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+created.ID+"/claim", nil, bearerHeader(claim2Token))
 	if claim2.StatusCode != http.StatusConflict {
 		t.Fatalf("expected conflict, got %d %s", claim2.StatusCode, string(body2))
@@ -678,7 +764,7 @@ func TestUnauthorizedTaskCreate(t *testing.T) {
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Should fail",
 		"type":  "technical",
-}, bearerHeader(srv.bearerToken(t, "intruder", "default-org", time.Now().Add(time.Hour))))
+	}, bearerHeader(srv.bearerToken(t, "intruder", "default-org", time.Now().Add(time.Hour))))
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", res.StatusCode, string(data))
 	}
@@ -716,7 +802,7 @@ func TestUnauthorizedAttestationKind(t *testing.T) {
 		"actor_id": "rev1",
 		"role_id":  "reviewer",
 	}, nil)
-	if grantRes.StatusCode != http.StatusOK {
+	if grantRes.StatusCode != http.StatusOK && grantRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
 	}
 
@@ -724,7 +810,7 @@ func TestUnauthorizedAttestationKind(t *testing.T) {
 		"entity_kind": "task",
 		"entity_id":   task.ID,
 		"kind":        "security.ok",
-}, bearerHeader(srv.bearerToken(t, "rev1", "default-org", time.Now().Add(time.Hour))))
+	}, bearerHeader(srv.bearerToken(t, "rev1", "default-org", time.Now().Add(time.Hour))))
 	if attRes.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", attRes.StatusCode, string(attData))
 	}
@@ -892,11 +978,11 @@ func TestRoleGrantAllowsClaim(t *testing.T) {
 		"actor_id": "dev-1",
 		"role_id":  "dev",
 	}, nil)
-	if grantRes.StatusCode != http.StatusOK {
+	if grantRes.StatusCode != http.StatusOK && grantRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
 	}
 
-devToken := srv.bearerToken(t, "dev-1", "default-org", time.Now().Add(time.Hour))
+	devToken := srv.bearerToken(t, "dev-1", "default-org", time.Now().Add(time.Hour))
 	claimRes, claimData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/claim", nil, bearerHeader(devToken))
 	if claimRes.StatusCode != http.StatusOK {
 		t.Fatalf("claim failed: %d %s", claimRes.StatusCode, string(claimData))
@@ -923,13 +1009,13 @@ func TestForceRequiresPermission(t *testing.T) {
 		"actor_id": "force-dev",
 		"role_id":  "dev",
 	}, nil)
-	if grantRes.StatusCode != http.StatusOK {
+	if grantRes.StatusCode != http.StatusOK && grantRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
 	}
 
 	doneRes, doneData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/done?force=true", map[string]any{
 		"work_proof": map[string]any{"note": "force"},
-}, bearerHeader(srv.bearerToken(t, "force-dev", "default-org", time.Now().Add(time.Hour))))
+	}, bearerHeader(srv.bearerToken(t, "force-dev", "default-org", time.Now().Add(time.Hour))))
 	if doneRes.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", doneRes.StatusCode, string(doneData))
 	}
@@ -976,6 +1062,16 @@ func TestDoneTaskRequiresValidation(t *testing.T) {
 	}
 	var task TaskResponse
 	_ = json.Unmarshal(data, &task)
+
+	patchRes, patchBody := doJSON(t, client, http.MethodPatch, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID, map[string]any{
+		"validation": map[string]any{
+			"mode":    "all",
+			"require": []string{"ci.passed"},
+		},
+	}, nil)
+	if patchRes.StatusCode != http.StatusOK {
+		t.Fatalf("patch validation: %d %s", patchRes.StatusCode, string(patchBody))
+	}
 
 	claimRes, claimBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/claim", nil, nil)
 	if claimRes.StatusCode != http.StatusOK {
@@ -1025,16 +1121,22 @@ func TestValidationEndpoint(t *testing.T) {
 	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Validate me",
 		"type":  "feature",
-		"validation": map[string]any{
-			"mode":    "all",
-			"require": []string{"ci.passed", "review.approved"},
-		},
 	}, nil)
 	if createRes.StatusCode != http.StatusCreated {
 		t.Fatalf("create task: %d %s", createRes.StatusCode, string(data))
 	}
 	var task TaskResponse
 	_ = json.Unmarshal(data, &task)
+
+	patchRes, patchBody := doJSON(t, client, http.MethodPatch, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID, map[string]any{
+		"validation": map[string]any{
+			"mode":    "all",
+			"require": []string{"ci.passed", "review.approved"},
+		},
+	}, nil)
+	if patchRes.StatusCode != http.StatusOK {
+		t.Fatalf("patch validation: %d %s", patchRes.StatusCode, string(patchBody))
+	}
 
 	attRes, attBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/attestations", map[string]any{
 		"entity_kind": "task",

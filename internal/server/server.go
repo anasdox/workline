@@ -174,6 +174,52 @@ func defaultCodeForStatus(status int) string {
 	}
 }
 
+func hasPermission(perms []string, perm string) bool {
+	for _, p := range perms {
+		if p == perm {
+			return true
+		}
+	}
+	return false
+}
+
+func requirePermission(ctx context.Context, e engine.Engine, projectID, perm string) error {
+	principal, authErr := principalFromRequest(ctx)
+	if authErr != nil {
+		return authErr
+	}
+	if hasPermission(principal.Permissions, perm) {
+		return nil
+	}
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	ok, err := e.Auth.ActorHasPermission(ctx, tx, projectID, principal.ActorID, perm)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return auth.ForbiddenError{Permission: perm}
+	}
+	return nil
+}
+
+func requireGlobalPermission(ctx context.Context, e engine.Engine, perm string) error {
+	principal, authErr := principalFromRequest(ctx)
+	if authErr != nil {
+		return authErr
+	}
+	if hasPermission(principal.Permissions, perm) {
+		return nil
+	}
+	if e.Config == nil {
+		return auth.ForbiddenError{Permission: perm}
+	}
+	return requirePermission(ctx, e, e.Config.Project.ID, perm)
+}
+
 func registerDocs(r chi.Router, basePath string) {
 	r.Get("/docs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -331,6 +377,9 @@ func registerStatus(api huma.API, e engine.Engine) {
 		Body map[string]any `json:"body"`
 	}, error) {
 		activeProject := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, activeProject, "project.status.read"); err != nil {
+			return nil, handleError(err)
+		}
 		p, err := e.Repo.GetProject(ctx, activeProject)
 		if err != nil {
 			return nil, handleError(err)
@@ -380,6 +429,9 @@ func registerProjects(api huma.API, e engine.Engine) {
 		if input.Body.ID == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "id is required", nil)
 		}
+		if err := requireGlobalPermission(ctx, e, "project.create"); err != nil {
+			return nil, handleError(err)
+		}
 		actorID, authErr := actorIDFromContext(ctx)
 		if authErr != nil {
 			return nil, authErr
@@ -409,6 +461,9 @@ func registerProjects(api huma.API, e engine.Engine) {
 	}, func(ctx context.Context, _ *struct{}) (*struct {
 		Body []ProjectResponse `json:"body"`
 	}, error) {
+		if err := requireGlobalPermission(ctx, e, "project.list"); err != nil {
+			return nil, handleError(err)
+		}
 		items, err := e.Repo.ListProjects(ctx)
 		if err != nil {
 			return nil, handleError(err)
@@ -429,7 +484,11 @@ func registerProjects(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body ProjectResponse `json:"body"`
 	}, error) {
-		p, err := e.Repo.GetProject(ctx, input.ProjectID)
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "project.read"); err != nil {
+			return nil, handleError(err)
+		}
+		p, err := e.Repo.GetProject(ctx, projectID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -462,13 +521,17 @@ func registerProjects(api huma.API, e engine.Engine) {
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
 		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "project.update"); err != nil {
+			return nil, handleError(err)
+		}
 		if _, authErr := actorIDFromContext(ctx); authErr != nil {
 			return nil, authErr
 		}
-		if err := e.Repo.UpdateProject(ctx, input.ProjectID, input.Body.Status, input.Body.Description); err != nil {
+		if err := e.Repo.UpdateProject(ctx, projectID, input.Body.Status, input.Body.Description); err != nil {
 			return nil, handleError(err)
 		}
-		p, err := e.Repo.GetProject(ctx, input.ProjectID)
+		p, err := e.Repo.GetProject(ctx, projectID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -491,10 +554,14 @@ func registerProjects(api huma.API, e engine.Engine) {
 	}, func(ctx context.Context, input *struct {
 		ProjectID string `path:"project_id"`
 	}) (*struct{}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "project.delete"); err != nil {
+			return nil, handleError(err)
+		}
 		if _, authErr := actorIDFromContext(ctx); authErr != nil {
 			return nil, authErr
 		}
-		if err := e.Repo.DeleteProject(ctx, input.ProjectID); err != nil {
+		if err := e.Repo.DeleteProject(ctx, projectID); err != nil {
 			return nil, handleError(err)
 		}
 		return &struct{}{}, nil
@@ -511,7 +578,11 @@ func registerProjects(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body ProjectConfigResponse `json:"body"`
 	}, error) {
-		cfg, err := e.Repo.GetProjectConfig(ctx, input.ProjectID)
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "project.config.read"); err != nil {
+			return nil, handleError(err)
+		}
+		cfg, err := e.Repo.GetProjectConfig(ctx, projectID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -582,23 +653,30 @@ func registerTasks(api huma.API, e engine.Engine) {
 		}
 		if input.Body.Policy != nil {
 			opts.PolicyPreset = input.Body.Policy.Preset
+		} else if rawPolicy, ok := bodyMap["policy"]; ok {
+			var policy TaskPolicyRequest
+			if err := json.Unmarshal(rawPolicy, &policy); err == nil && policy.Preset != "" {
+				opts.PolicyPreset = policy.Preset
+			}
 		}
-		if input.Body.Validation != nil {
+		if rawValidation, ok := bodyMap["validation"]; ok {
 			var validationMap map[string]json.RawMessage
-			if raw := bodyMap["validation"]; len(raw) > 0 {
-				_ = json.Unmarshal(raw, &validationMap)
+			if len(rawValidation) > 0 {
+				_ = json.Unmarshal(rawValidation, &validationMap)
 				if isNullRaw(validationMap["require"]) {
 					return nil, newAPIError(http.StatusBadRequest, "bad_request", "validation.require must be array", map[string]any{"field": "validation.require", "reason": "must be array"})
 				}
 			}
-			opts.PolicyOverride = true
-			opts.ValidationMode = input.Body.Validation.Mode
-			opts.RequiredKinds = input.Body.Validation.Require
-			if input.Body.Validation.Threshold != nil {
-				opts.RequiredThreshold = *input.Body.Validation.Threshold
-			}
-			if opts.ValidationMode == "threshold" && input.Body.Validation.Threshold == nil {
-				return nil, newAPIError(http.StatusBadRequest, "bad_request", "threshold required for validation.mode=threshold", nil)
+			if input.Body.Validation != nil {
+				opts.PolicyOverride = true
+				opts.ValidationMode = input.Body.Validation.Mode
+				opts.RequiredKinds = input.Body.Validation.Require
+				if input.Body.Validation.Threshold != nil {
+					opts.RequiredThreshold = *input.Body.Validation.Threshold
+				}
+				if opts.ValidationMode == "threshold" && input.Body.Validation.Threshold == nil {
+					return nil, newAPIError(http.StatusBadRequest, "bad_request", "threshold required for validation.mode=threshold", nil)
+				}
 			}
 		}
 		if input.Body.WorkProof != nil {
@@ -635,13 +713,17 @@ func registerTasks(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body paginatedTasks `json:"body"`
 	}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "task.list"); err != nil {
+			return nil, handleError(err)
+		}
 		limit := normalizeLimit(input.Limit)
 		cursorCreated, cursorID, err := parseCompositeCursor(input.Cursor)
 		if err != nil {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid cursor", map[string]any{"cursor": input.Cursor})
 		}
 		filter := repo.TaskFilters{
-			ProjectID:       projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID),
+			ProjectID:       projectID,
 			Status:          input.Status,
 			Iteration:       input.IterationID,
 			Parent:          input.ParentID,
@@ -677,6 +759,10 @@ func registerTasks(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body TaskResponse `json:"body"`
 	}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "task.read"); err != nil {
+			return nil, handleError(err)
+		}
 		t, err := e.Repo.GetTask(ctx, input.ID)
 		if err != nil {
 			return nil, handleError(err)
@@ -714,6 +800,12 @@ func registerTasks(api huma.API, e engine.Engine) {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
 		}
 		bodyMap := rawBodyMap(ctx)
+		if input.Body.Validation == nil {
+			var parsed UpdateTaskRequest
+			if err := json.Unmarshal(bodyBytes(ctx), &parsed); err == nil && parsed.Validation != nil {
+				input.Body.Validation = parsed.Validation
+			}
+		}
 		actorID, authErr := actorIDFromContext(ctx)
 		if authErr != nil {
 			return nil, authErr
@@ -757,35 +849,83 @@ func registerTasks(api huma.API, e engine.Engine) {
 		}
 		if rawValidation, ok := bodyMap["validation"]; ok {
 			opts.PolicyOverride = true
-			var validationMap map[string]json.RawMessage
-			_ = json.Unmarshal(rawValidation, &validationMap)
-			if input.Body.Validation != nil {
-				if isNullRaw(validationMap["require"]) {
-					return nil, newAPIError(http.StatusBadRequest, "bad_request", "validation.require must be array", map[string]any{"field": "validation.require", "reason": "must be array"})
-				}
-				if input.Body.Validation.Mode != nil {
-					opts.ValidationModeSet = true
-					opts.ValidationMode = *input.Body.Validation.Mode
-				}
-				if input.Body.Validation.Require != nil {
-					opts.RequiredKindsSet = true
-					opts.RequiredKinds = input.Body.Validation.Require
-				}
-				if _, present := validationMap["threshold"]; present {
-					opts.ThresholdSet = true
-					opts.Threshold = input.Body.Validation.Threshold
-				}
-				if opts.ValidationMode == "threshold" && opts.Threshold == nil {
-					return nil, newAPIError(http.StatusBadRequest, "bad_request", "threshold required for validation.mode=threshold", nil)
-				}
-			} else {
+			if isNullRaw(rawValidation) {
 				opts.ValidationModeSet = true
 				opts.ValidationMode = "none"
 				opts.RequiredKindsSet = true
 				opts.RequiredKinds = nil
+				var validationMap map[string]json.RawMessage
+				_ = json.Unmarshal(rawValidation, &validationMap)
 				if _, present := validationMap["threshold"]; present {
 					opts.ThresholdSet = true
 				}
+			} else {
+				var validationMap map[string]json.RawMessage
+				_ = json.Unmarshal(rawValidation, &validationMap)
+				if rawReq, present := validationMap["require"]; present && isNullRaw(rawReq) {
+					return nil, newAPIError(http.StatusBadRequest, "bad_request", "validation.require must be array", map[string]any{"field": "validation.require", "reason": "must be array"})
+				}
+				validation := input.Body.Validation
+				if validation == nil {
+					var parsed UpdateTaskValidationRequest
+					if err := json.Unmarshal(rawValidation, &parsed); err == nil {
+						validation = &parsed
+					}
+				}
+				if rawMode, present := validationMap["mode"]; present {
+					if isNullRaw(rawMode) {
+						return nil, newAPIError(http.StatusBadRequest, "bad_request", "validation.mode must be string", map[string]any{"field": "validation.mode", "reason": "must be string"})
+					}
+					opts.ValidationModeSet = true
+					if validation != nil && validation.Mode != nil {
+						opts.ValidationMode = *validation.Mode
+					} else {
+						var parsedMode string
+						if err := json.Unmarshal(rawMode, &parsedMode); err == nil {
+							opts.ValidationMode = parsedMode
+						}
+					}
+				}
+				if _, present := validationMap["require"]; present {
+					opts.RequiredKindsSet = true
+					if validation != nil {
+						opts.RequiredKinds = validation.Require
+					} else {
+						var parsedReq []string
+						if err := json.Unmarshal(validationMap["require"], &parsedReq); err == nil {
+							opts.RequiredKinds = parsedReq
+						}
+					}
+				}
+				if _, present := validationMap["threshold"]; present {
+					opts.ThresholdSet = true
+					if validation != nil {
+						opts.Threshold = validation.Threshold
+					} else {
+						var parsedThreshold int
+						if err := json.Unmarshal(validationMap["threshold"], &parsedThreshold); err == nil {
+							opts.Threshold = &parsedThreshold
+						}
+					}
+				}
+				if opts.ValidationMode == "threshold" && opts.Threshold == nil {
+					return nil, newAPIError(http.StatusBadRequest, "bad_request", "threshold required for validation.mode=threshold", nil)
+				}
+			}
+		} else if input.Body.Validation != nil {
+			opts.PolicyOverride = true
+			if input.Body.Validation.Mode != nil {
+				opts.ValidationModeSet = true
+				opts.ValidationMode = *input.Body.Validation.Mode
+			}
+			opts.RequiredKindsSet = true
+			opts.RequiredKinds = input.Body.Validation.Require
+			if input.Body.Validation.Threshold != nil {
+				opts.ThresholdSet = true
+				opts.Threshold = input.Body.Validation.Threshold
+			}
+			if opts.ValidationMode == "threshold" && opts.Threshold == nil {
+				return nil, newAPIError(http.StatusBadRequest, "bad_request", "threshold required for validation.mode=threshold", nil)
 			}
 		}
 		t, err := e.UpdateTask(ctx, opts)
@@ -939,7 +1079,11 @@ func registerTasks(api huma.API, e engine.Engine) {
 	}, func(ctx context.Context, input *treeInput) (*struct {
 		Body []treeNode `json:"body"`
 	}, error) {
-		tasks, err := e.Repo.ListTasks(ctx, repo.TaskFilters{ProjectID: projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID), Iteration: input.Iteration, Status: input.Status})
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "task.tree"); err != nil {
+			return nil, handleError(err)
+		}
+		tasks, err := e.Repo.ListTasks(ctx, repo.TaskFilters{ProjectID: projectID, Iteration: input.Iteration, Status: input.Status})
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -984,6 +1128,10 @@ func registerTasks(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body ValidationStatusResponse `json:"body"`
 	}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "task.validation.read"); err != nil {
+			return nil, handleError(err)
+		}
 		t, err := e.Repo.GetTask(ctx, input.ID)
 		if err != nil {
 			return nil, handleError(err)
@@ -1060,12 +1208,16 @@ func registerIterations(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body paginatedIterations `json:"body"`
 	}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "iteration.list"); err != nil {
+			return nil, handleError(err)
+		}
 		limit := normalizeLimit(input.Limit)
 		cursorCreated, cursorID, err := parseCompositeCursor(input.Cursor)
 		if err != nil {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid cursor", map[string]any{"cursor": input.Cursor})
 		}
-		items, err := e.Repo.ListIterationsWithCursor(ctx, projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID), limit+1, cursorCreated, cursorID)
+		items, err := e.Repo.ListIterationsWithCursor(ctx, projectID, limit+1, cursorCreated, cursorID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -1271,13 +1423,17 @@ func registerAttestations(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body paginatedAttestations `json:"body"`
 	}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "attestation.list"); err != nil {
+			return nil, handleError(err)
+		}
 		limit := normalizeLimit(input.Limit)
 		cursorTS, cursorID, err := parseCompositeCursor(input.Cursor)
 		if err != nil {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid cursor", map[string]any{"cursor": input.Cursor})
 		}
 		f := repo.AttestationFilters{
-			ProjectID:  projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID),
+			ProjectID:  projectID,
 			EntityKind: input.EntityKind,
 			EntityID:   input.EntityID,
 			Kind:       input.Kind,
@@ -1320,6 +1476,10 @@ func registerEvents(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body paginatedEvents `json:"body"`
 	}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "project.events.read"); err != nil {
+			return nil, handleError(err)
+		}
 		limit := normalizeLimit(input.Limit)
 		var cursorID int64
 		if input.Cursor != "" {
@@ -1329,7 +1489,7 @@ func registerEvents(api huma.API, e engine.Engine) {
 			}
 			cursorID = parsed
 		}
-		items, err := e.Repo.LatestEventsFrom(ctx, limit+1, cursorID, projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID), input.Type, input.EntityKind, input.EntityID)
+		items, err := e.Repo.LatestEventsFrom(ctx, limit+1, cursorID, projectID, input.Type, input.EntityKind, input.EntityID)
 		if err != nil {
 			return nil, handleError(err)
 		}

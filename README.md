@@ -11,15 +11,14 @@ Workline stores all state in SQLite at `.workline/workline.db`. Project configs 
 
 Core Concepts (explained simply)
 --------------------------------
-- Why attestations and policy-driven validation matter: they keep "done" honest. Attestations are proof stickers (tests passed, review approved); policies say which stickers are required before a task or iteration can finish, so quality is enforced automatically instead of by memory.
-- Workspace: the `.workline/` folder is your toy box; it holds only the database. You can keep an optional `workline.yml` in the workspace root for manual import. The DB is created automatically on first command if missing.
+
 - Project: the one big game you are playing in this workspace. Everything—iterations, tasks, evidence—belongs to this project.
-- Policy presets (`policies.presets`): ready-made rules that say which proof is needed. Think: "before dessert you must finish veggies." Example: preset `high` might require `ci.passed`, `review.approved`, and `security.ok`.
+- Attestations: proof stickers you attach to tasks or iterations (kinds live in the catalog). Example: after tests pass, add `wl attest add --entity-kind task --entity-id <id> --kind ci.passed`.
+- Policy(`policies`): rules that say which attestation is needed. Think: "before dessert you must finish veggies." Example: preset `high` might require `ci.passed`, `review.approved`, and `security.ok`.
 - Definition of Ready (DoR): proof that a task is ready to start (e.g., `requirements.accepted`, `design.reviewed`, `scope.groomed`). Use the `ready` preset to gate work.
 - Definition of Done (DoD): proof that a task is really done (e.g., `ci.passed`, `review.approved`, `acceptance.passed`). Task types map to DoD presets by default.
 - Tasks: the pieces of work (feature, bug, doc). They can depend on others or have children. Status path is `planned -> in_progress -> review -> done` (with `rejected`/`canceled` side exits). Example: `wl task create --type feature --title "Login"` makes a new task; `wl task done <id> --work-proof-json '{}'` tries to finish it after checks.
 - Iterations: short adventures inside the big game. Start `pending`, go `running`, then `delivered`, and finally `validated` when the right proof is present. Example: `wl iteration set-status iter-1 --status validated` requires the configured attestation unless `--force`.
-- Attestations: proof stickers you attach to tasks or iterations (kinds live in the catalog). Example: after tests pass, add `wl attest add --entity-kind task --entity-id <id> --kind ci.passed`.
 - Leases: a temporary "I’m working on this" tag so two kids don’t do the same task. Example: `wl task claim <id>` to grab, `wl task release <id>` to drop it.
 - Event log: the diary of everything that happened. Example: `wl log tail --n 20` shows recent entries.
 

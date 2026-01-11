@@ -415,6 +415,10 @@
           "policy": {
             "$ref": "#/components/schemas/TaskPolicyRequest"
           },
+          "priority": {
+            "format": "int64",
+            "type": "integer"
+          },
           "title": {
             "examples": [
               "Ship authentication"
@@ -1030,6 +1034,10 @@
             ],
             "type": "string"
           },
+          "priority": {
+            "format": "int64",
+            "type": "integer"
+          },
           "project_id": {
             "examples": [
               "workline"
@@ -1194,6 +1202,10 @@
           },
           "parent_id": {
             "type": "string"
+          },
+          "priority": {
+            "format": "int64",
+            "type": "integer"
           },
           "remove_depends_on": {
             "items": {

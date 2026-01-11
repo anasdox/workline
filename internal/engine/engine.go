@@ -104,6 +104,7 @@ type TaskCreateOptions struct {
 	Description      string
 	DependsOn        []string
 	AssigneeID       string
+	Priority         *int
 	WorkOutcomesJSON *string
 	PolicyPreset     string
 	RequiredKinds    []string
@@ -199,6 +200,7 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 		Description:              opts.Description,
 		Status:                   "planned",
 		AssigneeID:               optionalString(opts.AssigneeID),
+		Priority:                 opts.Priority,
 		WorkOutcomesJSON:         opts.WorkOutcomesJSON,
 		RequiredAttestationsJSON: reqJSON,
 		CreatedAt:                now,
@@ -330,6 +332,9 @@ type TaskUpdateOptions struct {
 	SetWorkOutcomes   *string
 	WorkOutcomesSet   bool
 	ClearWorkOutcomes bool
+	SetPriority       *int
+	PriorityProvided  bool
+	ClearPriority     bool
 	PolicyPreset      string
 	RequiredKinds     []string
 	RequiredKindsSet  bool
@@ -381,6 +386,13 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 			t.AssigneeID = nil
 		} else {
 			t.AssigneeID = opts.Assign
+		}
+	}
+	if opts.PriorityProvided {
+		if opts.ClearPriority {
+			t.Priority = nil
+		} else {
+			t.Priority = opts.SetPriority
 		}
 	}
 	if opts.WorkOutcomesSet {
@@ -847,6 +859,23 @@ func (e Engine) SetIterationStatus(ctx context.Context, id, status, actorID stri
 	}
 	if err := ensureIterationTransition(it.Status, status, force); err != nil {
 		return it, err
+	}
+	if status == "running" && !force {
+		tasks, err := e.Repo.ListTasks(ctx, repo.TaskFilters{
+			ProjectID: it.ProjectID,
+			Iteration: it.ID,
+		})
+		if err != nil {
+			return it, err
+		}
+		if len(tasks) == 0 {
+			return it, errors.New("cannot start iteration without tasks to prioritize")
+		}
+		for _, task := range tasks {
+			if task.Priority == nil {
+				return it, errors.New("task prioritization required before starting iteration")
+			}
+		}
 	}
 	requiredKind := ""
 	if e.Config != nil {

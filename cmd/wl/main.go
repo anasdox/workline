@@ -379,6 +379,7 @@ func taskCreateCmd() *cobra.Command {
 	var requires []string
 	var dependsOn []string
 	var policy string
+	var priority int
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a task",
@@ -387,6 +388,9 @@ func taskCreateCmd() *cobra.Command {
 			opts.RequiredKinds = requires
 			opts.DependsOn = dependsOn
 			opts.PolicyPreset = policy
+			if cmd.Flags().Changed("priority") {
+				opts.Priority = &priority
+			}
 			if cmd.Flags().Changed("require") {
 				opts.PolicyOverride = true
 			}
@@ -411,6 +415,7 @@ func taskCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.Description, "description", "", "description")
 	cmd.Flags().StringArrayVar(&dependsOn, "depends-on", []string{}, "dependency task id (repeatable)")
 	cmd.Flags().StringVar(&opts.AssigneeID, "assignee-id", "", "assignee id")
+	cmd.Flags().IntVar(&priority, "priority", 0, "priority (lower is higher)")
 	cmd.Flags().StringVar(&opts.PolicyPreset, "policy", "", "policy preset to apply (defaults use config mapping by task type)")
 	cmd.Flags().StringArrayVar(&requires, "require", []string{}, "required attestation kind (repeatable)")
 	_ = cmd.MarkFlagRequired("title")
@@ -487,6 +492,8 @@ func taskUpdateCmd() *cobra.Command {
 	var workOutcomes string
 	var assign string
 	var setPolicy string
+	var priority int
+	var clearPriority bool
 	cmd := &cobra.Command{
 		Use:   "update <id>",
 		Short: "Update task",
@@ -504,6 +511,14 @@ func taskUpdateCmd() *cobra.Command {
 			opts.AssignProvided = cmd.Flags().Changed("assign")
 			opts.ParentProvided = cmd.Flags().Changed("set-parent")
 			opts.WorkOutcomesSet = cmd.Flags().Changed("set-work-outcomes-json")
+			if cmd.Flags().Changed("priority") || clearPriority {
+				opts.PriorityProvided = true
+				if clearPriority {
+					opts.ClearPriority = true
+				} else {
+					opts.SetPriority = &priority
+				}
+			}
 			opts.RequiredKindsSet = cmd.Flags().Changed("require")
 			if opts.WorkOutcomesSet && opts.SetWorkOutcomes == nil {
 				opts.ClearWorkOutcomes = true
@@ -527,6 +542,8 @@ func taskUpdateCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&removeDeps, "remove-depends-on", []string{}, "remove dependency")
 	cmd.Flags().StringVar(&setParent, "set-parent", "", "set parent task id (empty for none)")
 	cmd.Flags().StringVar(&workOutcomes, "set-work-outcomes-json", "", "set work outcomes JSON")
+	cmd.Flags().IntVar(&priority, "priority", 0, "priority (lower is higher)")
+	cmd.Flags().BoolVar(&clearPriority, "clear-priority", false, "clear priority")
 	cmd.Flags().StringVar(&opts.PolicyPreset, "set-policy", "", "apply policy preset to task")
 	cmd.Flags().StringArrayVar(&requires, "require", []string{}, "required attestation kind")
 	return cmd

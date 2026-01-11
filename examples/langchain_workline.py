@@ -18,13 +18,15 @@ This script:
   2) Ensures a "problem refinement" task exists and stores discovery output in it.
   3) Produces an agile iteration plan (sprint goal, backlog, dependencies).
   4) Runs a human-in-the-loop review step (interactive).
-  5) Creates a Workline iteration, then tasks per sprint backlog item.
-  6) Runs demo/review gates, closes the iteration, then fetches events.
-  7) Logs all agent actions into a Workline "agent log" task.
+  5) Generates a PRD and Gherkin specs for all features.
+  6) Creates a Workline iteration, then tasks per sprint backlog item.
+  7) Runs demo/review gates, closes the iteration, then fetches events.
+  8) Logs all agent actions into a Workline "agent log" task.
 """
 
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,6 +64,7 @@ ACCESS_TOKEN = os.getenv("WORKLINE_ACCESS_TOKEN")
 HUMAN_REVIEW_MODE = os.getenv("WORKLINE_HUMAN_REVIEW_MODE", "interactive")
 
 client = WorklineClient(BASE_URL, PROJECT_ID, api_key=API_KEY, access_token=ACCESS_TOKEN)
+CURRENT_WORKSHOP_ID: Optional[str] = None
 
 
 @tool
@@ -85,6 +88,7 @@ def create_workline_task_full(
     assignee_id: Optional[str] = None,
     depends_on: Optional[List[str]] = None,
     description: Optional[str] = None,
+    priority: Optional[int] = None,
 ) -> Dict[str, str]:
     """Create a Workline task with iteration, dependencies, and owner."""
     body: Dict[str, object] = {"title": title, "type": task_type}
@@ -96,6 +100,8 @@ def create_workline_task_full(
         body["depends_on"] = depends_on
     if description:
         body["description"] = description
+    if priority is not None:
+        body["priority"] = priority
     data = client._request("POST", client._project_path("tasks"), body)
     return {
         "id": data["id"],
@@ -104,6 +110,7 @@ def create_workline_task_full(
         "status": data["status"],
         "iteration_id": data.get("iteration_id"),
         "assignee_id": data.get("assignee_id"),
+        "priority": data.get("priority"),
     }
 
 
@@ -171,9 +178,18 @@ def list_workline_tasks(iteration_id: Optional[str] = None, status: Optional[str
             "title": item["title"],
             "status": item["status"],
             "iteration_id": item.get("iteration_id"),
+            "priority": item.get("priority"),
         }
         for item in items
     ]
+
+
+@tool
+def update_workline_task_priority(task_id: str, priority: int) -> Dict[str, object]:
+    """Set priority for a Workline task."""
+    body = {"priority": priority}
+    data = client._request("PATCH", client._project_path(f"tasks/{task_id}"), body)
+    return {"id": data["id"], "priority": data.get("priority"), "status": data.get("status")}
 
 
 def _get_task(task_id: str) -> Optional[Dict[str, object]]:
@@ -191,35 +207,13 @@ def _create_problem_refinement_task(task_id: str) -> Dict[str, object]:
         "title": "Problem refinement",
         "type": "workshop",
         "description": "Capture the refined problem statement and assumptions.",
-        "policy": {"preset": "workshop.discovery"},
+        "policy": {"preset": "workshop.problem_refinement"},
     }
     return client._request("POST", client._project_path("tasks"), body)
 
 
-def _update_task_work_outcomes(task_id: str, work_outcomes: Dict[str, object]) -> Dict[str, object]:
-    body = {"work_outcomes": work_outcomes}
-    url = client._project_path(f"tasks/{task_id}")
-    try:
-        return client._request("PATCH", url, body)
-    except APIError as err:
-        err_body = err.body if isinstance(err.body, dict) else {}
-        code = ""
-        if isinstance(err_body.get("error"), dict):
-            code = err_body["error"].get("code", "")
-        if code != "lease_conflict":
-            raise
-    client._request("POST", client._project_path(f"tasks/{task_id}/claim"), None)
-    try:
-        return client._request("PATCH", url, body)
-    finally:
-        client._request("POST", client._project_path(f"tasks/{task_id}/release"), None)
-
-
-def ensure_problem_refinement_task(discovery_output: Dict[str, object]) -> str:
+def ensure_problem_refinement_task() -> str:
     task = _ensure_problem_refinement_task_exists()
-    work_outcomes = task.get("work_outcomes") or {}
-    work_outcomes["discovery"] = discovery_output
-    _update_task_work_outcomes(task["id"], work_outcomes)
     return task["id"]
 
 
@@ -229,6 +223,51 @@ def _ensure_problem_refinement_task_exists() -> Dict[str, object]:
     if task is None:
         task = _create_problem_refinement_task(task_id)
     return task
+
+
+def ensure_workshop_task(task_id: str, title: str, preset: str, description: str) -> Dict[str, object]:
+    task = _get_task(task_id)
+    if task is None:
+        body = {
+            "id": task_id,
+            "title": title,
+            "type": "workshop",
+            "description": description,
+            "policy": {"preset": preset},
+        }
+        task = client._request("POST", client._project_path("tasks"), body)
+    return task
+
+
+def set_current_workshop(task_id: Optional[str]) -> None:
+    global CURRENT_WORKSHOP_ID
+    CURRENT_WORKSHOP_ID = task_id
+
+
+def append_workshop_conversation(task_id: str, question: str, answer: str) -> None:
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "question": question,
+        "answer": answer,
+    }
+    client.append_work_outcomes(task_id, "conversation", entry)
+
+
+def get_workshop_output(task_id: str) -> Optional[str]:
+    task = _get_task(task_id)
+    if not task:
+        return None
+    outcomes = task.get("work_outcomes") or {}
+    output = outcomes.get("output")
+    if isinstance(output, str) and output.strip():
+        return output
+    return None
+
+
+def set_workshop_output(task_id: str, output: str) -> None:
+    client.put_work_outcomes(task_id, "output", output)
+    client.put_work_outcomes(task_id, "summary", output)
+    append_workshop_conversation(task_id, "Workshop summary", output)
 
 
 def get_problem_statement_from_workline() -> Optional[str]:
@@ -244,72 +283,26 @@ def get_problem_statement_from_workline() -> Optional[str]:
 
 def set_problem_statement_in_workline(problem_statement: str) -> None:
     task = _ensure_problem_refinement_task_exists()
-    work_outcomes = task.get("work_outcomes") or {}
-    work_outcomes["problem_statement"] = problem_statement
-    _update_task_work_outcomes(task["id"], work_outcomes)
+    client.put_work_outcomes(task["id"], "problem_statement", problem_statement)
 
 
 def log_conversation(question: str, answer: str) -> None:
-    task = _ensure_problem_refinement_task_exists()
-    entry = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "question": question,
-        "answer": answer,
-    }
-    client.append_work_outcomes(task["id"], "conversation", entry)
+    if CURRENT_WORKSHOP_ID is None:
+        ensure_problem_refinement_task()
+    task_id = CURRENT_WORKSHOP_ID or "problem-refinement"
+    append_workshop_conversation(task_id, question, answer)
 
 
 def get_problem_refinement_discovery() -> Optional[Dict[str, object]]:
-    task = _get_task("problem-refinement")
-    if not task:
-        return None
-    work_outcomes = task.get("work_outcomes") or {}
-    discovery = work_outcomes.get("discovery")
-    if isinstance(discovery, dict):
-        return discovery
-    if isinstance(discovery, str) and discovery.strip():
-        return {"initial": discovery}
-    return None
-
-
-def ensure_agent_log_task() -> str:
-    task_id = "agent-log"
-    task = _get_task(task_id)
-    if task is None:
-        body = {
-            "id": task_id,
-            "title": "Agent actions log",
-            "type": "docs",
-            "description": "Chronological log of agent actions and decisions.",
-        }
-        task = client._request("POST", client._project_path("tasks"), body)
-    return task["id"]
-
-
-def append_agent_log(stage: str, summary: str, payload: Optional[Dict[str, object]] = None) -> None:
-    task_id = ensure_agent_log_task()
-    entry = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "stage": stage,
-        "summary": summary,
+    outputs = {
+        "initial": get_workshop_output("problem-refinement"),
+        "event_storming": get_workshop_output("workshop-eventstorming"),
+        "decision_workshop": get_workshop_output("workshop-decision"),
+        "clarify": get_workshop_output("workshop-clarify"),
     }
-    if payload:
-        entry["payload"] = payload
-    client.append_work_outcomes(task_id, "actions", entry)
-
-
-def get_latest_log_payload(stage: str) -> Optional[Dict[str, object]]:
-    task = _get_task("agent-log")
-    if not task:
+    if not any(outputs.values()):
         return None
-    work_outcomes = task.get("work_outcomes") or {}
-    actions = work_outcomes.get("actions")
-    if not isinstance(actions, list):
-        return None
-    for entry in reversed(actions):
-        if entry.get("stage") == stage and isinstance(entry.get("payload"), dict):
-            return entry["payload"]
-    return None
+    return {k: v for k, v in outputs.items() if v}
 
 
 def ask_human_question_local(question: str, options: Optional[List[str]] = None) -> str:
@@ -335,21 +328,10 @@ def ask_human_question_local(question: str, options: Optional[List[str]] = None)
                         if selected.lower().startswith("other"):
                             detail = input("Please specify: ").strip()
                             if detail:
-                                append_agent_log(
-                                    "human.question",
-                                    "Asked a human question",
-                                    {"question": question, "answer": detail, "choice": selected},
-                                )
                                 log_conversation(question, detail)
                                 return detail
-                        append_agent_log(
-                            "human.question",
-                            "Asked a human question",
-                            {"question": question, "answer": selected},
-                        )
                         log_conversation(question, selected)
                         return selected
-                append_agent_log("human.question", "Asked a human question", {"question": question, "answer": answer})
                 log_conversation(question, answer)
                 return answer
             print("Please enter a non-empty answer.", flush=True)
@@ -391,23 +373,43 @@ def ask_human_for_review(draft: str) -> str:
 
 
 def _run_agent(model: ChatOpenAI, system_prompt: str, user_input: str, tools: List) -> str:
-    if _LC_AGENT_MODE == "graph" and lc_create_agent is not None:
-        agent = lc_create_agent(
-            model,
-            tools=tools,
-            system_prompt=system_prompt,
-            debug=True,
-            interrupt_after=["tools"],
+    if not tools:
+        response = model.invoke(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ]
         )
-        result = agent.invoke({"messages": [{"role": "user", "content": user_input}]})
-        messages = result.get("messages", [])
-        for msg in reversed(messages):
-            if hasattr(msg, "content"):
-                return msg.content
-            if isinstance(msg, dict) and msg.get("content"):
-                return msg["content"]
-        return ""
+        if hasattr(response, "content"):
+            return response.content
+        return str(response)
+    if _LC_AGENT_MODE == "graph" and lc_create_agent is not None and tools:
+        try:
+            agent = lc_create_agent(
+                model,
+                tools=tools,
+                system_prompt=system_prompt,
+                debug=True,
+                interrupt_after=["tools"],
+            )
+            result = agent.invoke({"messages": [{"role": "user", "content": user_input}]})
+            messages = result.get("messages", [])
+            for msg in reversed(messages):
+                if hasattr(msg, "content"):
+                    return msg.content
+                if isinstance(msg, dict) and msg.get("content"):
+                    return msg["content"]
+            return ""
+        except ValueError:
+            pass
 
+    try:
+        create_agent_fn = create_tool_calling_agent
+    except NameError:
+        from langchain.agents import create_tool_calling_agent as create_agent_fn
+        from langchain.agents.agent import AgentExecutor as Executor
+    else:
+        Executor = AgentExecutor
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt),
@@ -415,9 +417,23 @@ def _run_agent(model: ChatOpenAI, system_prompt: str, user_input: str, tools: Li
             ("placeholder", "{agent_scratchpad}"),
         ]
     )
-    agent = create_tool_calling_agent(model, tools, prompt)
-    executor = AgentExecutor(agent=agent, tools=tools, verbose=True, max_iterations=1)
-    return executor.invoke({})["output"]
+    agent = create_agent_fn(model, tools, prompt)
+    executor = Executor(agent=agent, tools=tools, verbose=True, max_iterations=6)
+    return executor.invoke({"input": ""})["output"]
+
+
+def _extract_json_payload(text: str) -> Optional[object]:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
 
 
 def run_discovery(model: ChatOpenAI, problem_statement: str) -> str:
@@ -446,14 +462,53 @@ def run_discovery_phase(model: ChatOpenAI, phase_name: str, context: str) -> str
     return _run_agent(model, system_prompt, context, tools)
 
 
+def run_workshop_next_steps(model: ChatOpenAI, phase_name: str, context: str) -> str:
+    system_prompt = (
+        f"You just completed the {phase_name} workshop. "
+        "Plan the next steps needed to reach the iteration goal. "
+        "Return a concise, ordered list with owners if possible."
+    )
+    return _run_agent(model, system_prompt, context, tools=[])
+
+
 def continue_discovery(
     model: ChatOpenAI,
     problem_statement: str,
     existing: Optional[Dict[str, object]],
 ) -> Dict[str, object]:
     discovery: Dict[str, object] = existing or {}
+    ensure_workshop_task(
+        "problem-refinement",
+        "Problem refinement",
+        "workshop.problem_refinement",
+        "Refine the problem statement and clarify scope.",
+    )
+    ensure_workshop_task(
+        "workshop-eventstorming",
+        "Event storming",
+        "workshop.eventstorming",
+        "Map domain events and flows.",
+    )
+    ensure_workshop_task(
+        "workshop-decision",
+        "Decision workshop",
+        "workshop.decision",
+        "Capture key trade-offs and decisions.",
+    )
+    ensure_workshop_task(
+        "workshop-clarify",
+        "Clarification workshop",
+        "workshop.clarify",
+        "Resolve open questions and assumptions.",
+    )
     if "initial" not in discovery or not str(discovery.get("initial", "")).strip():
-        discovery["initial"] = run_discovery(model, problem_statement)
+        initial_output = get_workshop_output("problem-refinement")
+        if not initial_output:
+            set_current_workshop("problem-refinement")
+            initial_output = run_discovery(model, problem_statement)
+            set_current_workshop(None)
+            set_workshop_output("problem-refinement", initial_output)
+        discovery["initial"] = initial_output
     context = "\n\n".join(
         [
             f"Problem Statement:\n{problem_statement}",
@@ -461,11 +516,35 @@ def continue_discovery(
         ]
     )
     if "event_storming" not in discovery:
-        discovery["event_storming"] = run_discovery_phase(model, "Event Storming", context)
+        event_out = get_workshop_output("workshop-eventstorming")
+        if not event_out:
+            set_current_workshop("workshop-eventstorming")
+            event_out = run_discovery_phase(model, "Event Storming", context)
+            set_current_workshop(None)
+            set_workshop_output("workshop-eventstorming", event_out)
+            next_steps = run_workshop_next_steps(model, "Event Storming", context)
+            client.put_work_outcomes("workshop-eventstorming", "next_steps", next_steps)
+        discovery["event_storming"] = event_out
     if "decision_workshop" not in discovery:
-        discovery["decision_workshop"] = run_discovery_phase(model, "Decision Workshop", context)
-    if "brainstorm" not in discovery:
-        discovery["brainstorm"] = run_discovery_phase(model, "Brainstorm", context)
+        decision_out = get_workshop_output("workshop-decision")
+        if not decision_out:
+            set_current_workshop("workshop-decision")
+            decision_out = run_discovery_phase(model, "Decision Workshop", context)
+            set_current_workshop(None)
+            set_workshop_output("workshop-decision", decision_out)
+            next_steps = run_workshop_next_steps(model, "Decision Workshop", context)
+            client.put_work_outcomes("workshop-decision", "next_steps", next_steps)
+        discovery["decision_workshop"] = decision_out
+    if "clarify" not in discovery:
+        clarify_out = get_workshop_output("workshop-clarify")
+        if not clarify_out:
+            set_current_workshop("workshop-clarify")
+            clarify_out = run_discovery_phase(model, "Clarification", context)
+            set_current_workshop(None)
+            set_workshop_output("workshop-clarify", clarify_out)
+            next_steps = run_workshop_next_steps(model, "Clarification", context)
+            client.put_work_outcomes("workshop-clarify", "next_steps", next_steps)
+        discovery["clarify"] = clarify_out
     return discovery
 
 
@@ -493,14 +572,19 @@ def run_workline(model: ChatOpenAI, final_plan: str) -> str:
         "includes an Iteration ID and Sprint Backlog. Do the following:\n"
         "1) Check if the iteration already exists using list_workline_iterations.\n"
         "2) If missing, create the iteration (status will be pending).\n"
-        "3) Move iteration to running if not already.\n"
-        "4) Check existing tasks for this iteration using list_workline_tasks; "
-        "only create missing backlog items with create_workline_task_full.\n"
-        "5) Ask the human if demo/review is approved. If approved, add an "
+        "3) Always list tasks for this iteration using list_workline_tasks. "
+        "Use the existing task IDs to avoid duplicates and to wire dependencies.\n"
+        "4) Only create missing backlog items with create_workline_task_full. "
+        "Map dependency names to existing task IDs when possible.\n"
+        "5) Prioritize all tasks before starting the iteration. Assign "
+        "priority 1..N (1 is highest). If any existing task is missing a "
+        "priority, set it with update_workline_task_priority.\n"
+        "6) Move iteration to running if not already.\n"
+        "7) Ask the human if demo/review is approved. If approved, add an "
         "iteration.approved attestation on the iteration.\n"
-        "6) Move iteration to delivered, then validated.\n"
-        "7) Add ci.passed and review.approved attestations for each task.\n"
-        "8) Call latest_workline_events.\n"
+        "8) Move iteration to delivered, then validated.\n"
+        "9) Add ci.passed and review.approved attestations for each task.\n"
+        "10) Call latest_workline_events.\n"
         "Use ask_human_question for any decision points and provide options. "
         "Ask at most one question at a time. Output a short "
         "'Workline Actions' section listing created task IDs and iteration status."
@@ -509,6 +593,7 @@ def run_workline(model: ChatOpenAI, final_plan: str) -> str:
         create_workline_iteration,
         set_workline_iteration_status,
         create_workline_task_full,
+        update_workline_task_priority,
         add_workline_attestation,
         latest_workline_events,
         list_workline_iterations,
@@ -518,10 +603,86 @@ def run_workline(model: ChatOpenAI, final_plan: str) -> str:
     return _run_agent(model, system_prompt, final_plan, tools)
 
 
+def _extract_iteration_id(plan: str) -> Optional[str]:
+    match = re.search(r"iteration id\\s*[:\\-]\\s*([\\w-]+)", plan, re.IGNORECASE)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def _list_iteration_tasks_for_context(iteration_id: str) -> List[Dict[str, str]]:
+    try:
+        return list_workline_tasks(iteration_id=iteration_id, limit=200)
+    except APIError:
+        return []
+
+
+def run_specifications(model: ChatOpenAI, discovery: Dict[str, object], plan: str) -> Dict[str, str]:
+    system_prompt = (
+        "You are a product analyst. Produce a PRD and functional specifications "
+        "for ALL features in the plan. Use the discovery context. "
+        "Return JSON with keys: prd, gherkin. "
+        "PRD should include: overview, goals, non-goals, personas, "
+        "user journeys, functional requirements, non-functional requirements, "
+        "dependencies, risks, open questions. "
+        "Gherkin must include Feature and Scenario blocks for each feature."
+    )
+    user_input = (
+        "Discovery:\n"
+        + json.dumps(discovery, indent=2)
+        + "\n\nPlan:\n"
+        + plan
+    )
+    output = _run_agent(model, system_prompt, user_input, tools=[])
+    parsed = _extract_json_payload(output)
+    if not isinstance(parsed, dict):
+        return {"prd": output, "gherkin": ""}
+    prd = parsed.get("prd", "")
+    gherkin = parsed.get("gherkin", "")
+    return {"prd": prd, "gherkin": gherkin}
+
+
+def _slugify(value: str) -> str:
+    safe = []
+    last_dash = False
+    for ch in value.lower():
+        if ch.isalnum():
+            safe.append(ch)
+            last_dash = False
+        elif not last_dash:
+            safe.append("-")
+            last_dash = True
+    slug = "".join(safe).strip("-")
+    return slug or "feature"
+
+
+def run_feature_workshops(model: ChatOpenAI, plan: str) -> List[Dict[str, str]]:
+    system_prompt = (
+        "Extract the feature list from the plan. Return JSON array with "
+        "objects: {\"title\": \"...\", \"summary\": \"...\"}. "
+        "Only include real product features, not process steps."
+    )
+    output = _run_agent(model, system_prompt, plan, tools=[])
+    parsed = _extract_json_payload(output)
+    if not isinstance(parsed, list):
+        return []
+    items: List[Dict[str, str]] = []
+    for entry in parsed:
+        if not isinstance(entry, dict):
+            continue
+        title = str(entry.get("title", "")).strip()
+        summary = str(entry.get("summary", "")).strip()
+        if title:
+            items.append({"title": title, "summary": summary})
+    return items
+
+
 def main() -> None:
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
     problem_statement = get_problem_statement_from_workline()
     if not problem_statement:
+        ensure_problem_refinement_task()
+        set_current_workshop("problem-refinement")
         problem_statement = ask_human_question_local(
             "What is the problem statement for this project?",
             options=[
@@ -531,41 +692,49 @@ def main() -> None:
                 "Other (type your own)",
             ],
         )
+        set_current_workshop(None)
         set_problem_statement_in_workline(problem_statement)
     discovery = get_problem_refinement_discovery()
-    if discovery:
-        append_agent_log("discovery.resume", "Loaded discovery from Workline", {"output": discovery})
-    else:
-        append_agent_log("discovery.start", "Starting discovery phase", {"problem_statement": problem_statement})
-
     discovery = continue_discovery(model, problem_statement, discovery)
-    append_agent_log("discovery.complete", "Completed discovery phases", {"output": discovery})
 
-    refinement_task_id = ensure_problem_refinement_task(discovery)
+    refinement_task_id = ensure_problem_refinement_task()
 
-    final_plan_payload = get_latest_log_payload("plan.approved")
-    if final_plan_payload and isinstance(final_plan_payload.get("output"), str):
-        final_plan = final_plan_payload["output"]
-        append_agent_log("planning.resume", "Loaded approved plan from Workline", {"output": final_plan})
+    draft_plan = run_planner(model, json.dumps(discovery, indent=2))
+    feedback = ask_human_for_review(draft_plan)
+    if feedback.lower().startswith("approve"):
+        final_plan = draft_plan
     else:
-        append_agent_log("planning.start", "Starting iteration planning", {"discovery_summary": discovery})
-        draft_plan = run_planner(model, json.dumps(discovery, indent=2))
-        append_agent_log("planning.complete", "Drafted iteration plan", {"output": draft_plan})
+        final_plan = (
+            f"{draft_plan}\n\n---\nHuman Review Feedback:\n{feedback}\n"
+            "Update the plan to address this feedback."
+        )
 
-        feedback = ask_human_for_review(draft_plan)
-        if feedback.lower().startswith("approve"):
-            final_plan = draft_plan
-            append_agent_log("plan.approved", "Plan approved", {"output": final_plan})
-        else:
-            final_plan = (
-                f"{draft_plan}\n\n---\nHuman Review Feedback:\n{feedback}\n"
-                "Update the plan to address this feedback."
-            )
-            append_agent_log("plan.feedback", "Plan feedback provided", {"feedback": feedback})
+    feature_workshops = run_feature_workshops(model, final_plan)
+    for feature in feature_workshops:
+        slug = _slugify(feature["title"])
+        task_id = f"workshop-feature-{slug}"
+        summary = feature.get("summary") or "Feature workshop for requirements and Gherkin specs."
+        ensure_workshop_task(task_id, f"Feature workshop: {feature['title']}", "workshop.clarify", summary)
+        set_workshop_output(task_id, summary)
+        append_workshop_conversation(task_id, "Auto-generated from plan", summary)
+    if feature_workshops:
+        client.put_work_outcomes(refinement_task_id, "feature_workshops", feature_workshops)
 
-    append_agent_log("execution.start", "Starting Workline execution", {"plan": final_plan})
-    result = run_workline(model, final_plan)
-    append_agent_log("execution.complete", "Completed Workline execution", {"result": result})
+    specs = run_specifications(model, discovery, final_plan)
+    client.put_work_outcomes(refinement_task_id, "prd", specs.get("prd", ""))
+    client.put_work_outcomes(refinement_task_id, "gherkin", specs.get("gherkin", ""))
+
+    iteration_id = _extract_iteration_id(final_plan)
+    existing_tasks = None
+    if iteration_id:
+        existing_tasks = _list_iteration_tasks_for_context(iteration_id)
+    execution_context = final_plan
+    if existing_tasks is not None:
+        execution_context = (
+            f"{final_plan}\n\nExisting tasks for iteration {iteration_id}:\n"
+            + json.dumps(existing_tasks, indent=2)
+        )
+    result = run_workline(model, execution_context)
 
     print(
         json.dumps(
@@ -573,6 +742,8 @@ def main() -> None:
                 "discovery": discovery,
                 "problem_refinement_task_id": refinement_task_id,
                 "plan": final_plan,
+                "prd": specs.get("prd", ""),
+                "gherkin": specs.get("gherkin", ""),
                 "workline": result,
             },
             indent=2,

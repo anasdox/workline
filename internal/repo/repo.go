@@ -250,18 +250,18 @@ func nullableStringPtr(v *string) any {
 }
 
 func (r Repo) InsertTask(ctx context.Context, tx *sql.Tx, t domain.Task) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO tasks(id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := tx.ExecContext(ctx, `INSERT INTO tasks(id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,priority,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		t.ID, t.ProjectID, nullableStringPtr(t.IterationID), nullableStringPtr(t.ParentID), t.Type, t.Title, nullable(t.Description),
-		t.Status, nullableStringPtr(t.AssigneeID), nullableStringPtr(t.WorkOutcomesJSON), nullableStringPtr(t.RequiredAttestationsJSON),
+		t.Status, nullableStringPtr(t.AssigneeID), nullableIntPtr(t.Priority), nullableStringPtr(t.WorkOutcomesJSON), nullableStringPtr(t.RequiredAttestationsJSON),
 		t.CreatedAt, t.UpdatedAt, nullableStringPtr(t.CompletedAt))
 	return err
 }
 
 func (r Repo) UpdateTask(ctx context.Context, tx *sql.Tx, t domain.Task) error {
-	_, err := tx.ExecContext(ctx, `UPDATE tasks SET iteration_id=?, parent_id=?, type=?, title=?, description=?, status=?, assignee_id=?, work_outcomes_json=?, required_attestations_json=?, updated_at=?, completed_at=? WHERE id=?`,
+	_, err := tx.ExecContext(ctx, `UPDATE tasks SET iteration_id=?, parent_id=?, type=?, title=?, description=?, status=?, assignee_id=?, priority=?, work_outcomes_json=?, required_attestations_json=?, updated_at=?, completed_at=? WHERE id=?`,
 		nullableStringPtr(t.IterationID), nullableStringPtr(t.ParentID), t.Type, t.Title, nullable(t.Description), t.Status,
-		nullableStringPtr(t.AssigneeID), nullableStringPtr(t.WorkOutcomesJSON), nullableStringPtr(t.RequiredAttestationsJSON),
+		nullableStringPtr(t.AssigneeID), nullableIntPtr(t.Priority), nullableStringPtr(t.WorkOutcomesJSON), nullableStringPtr(t.RequiredAttestationsJSON),
 		t.UpdatedAt, nullableStringPtr(t.CompletedAt), t.ID)
 	return err
 }
@@ -269,8 +269,9 @@ func (r Repo) UpdateTask(ctx context.Context, tx *sql.Tx, t domain.Task) error {
 func (r Repo) GetTask(ctx context.Context, id string) (domain.Task, error) {
 	var t domain.Task
 	var iterationID, parentID, assigneeID, workOutcomes, requiredAtt, completedAt, description sql.NullString
-	err := r.DB.QueryRowContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at FROM tasks WHERE id=?`, id).
-		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &workOutcomes, &requiredAtt, &t.CreatedAt, &t.UpdatedAt, &completedAt)
+	var priority sql.NullInt64
+	err := r.DB.QueryRowContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,priority,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at FROM tasks WHERE id=?`, id).
+		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &priority, &workOutcomes, &requiredAtt, &t.CreatedAt, &t.UpdatedAt, &completedAt)
 	if err == sql.ErrNoRows {
 		return t, ErrNotFound
 	}
@@ -288,6 +289,10 @@ func (r Repo) GetTask(ctx context.Context, id string) (domain.Task, error) {
 	}
 	if assigneeID.Valid {
 		t.AssigneeID = &assigneeID.String
+	}
+	if priority.Valid {
+		p := int(priority.Int64)
+		t.Priority = &p
 	}
 	if workOutcomes.Valid {
 		t.WorkOutcomesJSON = &workOutcomes.String
@@ -309,8 +314,9 @@ func (r Repo) GetTask(ctx context.Context, id string) (domain.Task, error) {
 func (r Repo) GetTaskTx(ctx context.Context, tx *sql.Tx, id string) (domain.Task, error) {
 	var t domain.Task
 	var iterationID, parentID, assigneeID, workOutcomes, requiredAtt, completedAt, description sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at FROM tasks WHERE id=?`, id).
-		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &workOutcomes, &requiredAtt, &t.CreatedAt, &t.UpdatedAt, &completedAt)
+	var priority sql.NullInt64
+	err := tx.QueryRowContext(ctx, `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,priority,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at FROM tasks WHERE id=?`, id).
+		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &priority, &workOutcomes, &requiredAtt, &t.CreatedAt, &t.UpdatedAt, &completedAt)
 	if err == sql.ErrNoRows {
 		return t, ErrNotFound
 	}
@@ -328,6 +334,10 @@ func (r Repo) GetTaskTx(ctx context.Context, tx *sql.Tx, id string) (domain.Task
 	}
 	if assigneeID.Valid {
 		t.AssigneeID = &assigneeID.String
+	}
+	if priority.Valid {
+		p := int(priority.Int64)
+		t.Priority = &p
 	}
 	if workOutcomes.Valid {
 		t.WorkOutcomesJSON = &workOutcomes.String
@@ -388,7 +398,7 @@ func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, erro
 	if len(clauses) > 0 {
 		where = "WHERE " + strings.Join(clauses, " AND ")
 	}
-	query := `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at FROM tasks ` + where + ` ORDER BY created_at DESC, id DESC`
+	query := `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,priority,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at FROM tasks ` + where + ` ORDER BY created_at DESC, id DESC`
 	if f.Limit > 0 {
 		query += " LIMIT ?"
 		args = append(args, f.Limit)
@@ -402,7 +412,8 @@ func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, erro
 	for rows.Next() {
 		var t domain.Task
 		var iterationID, parentID, assigneeID, workOutcomes, requiredAtt, completedAt, description sql.NullString
-		if err := rows.Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &workOutcomes, &requiredAtt, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
+		var priority sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &priority, &workOutcomes, &requiredAtt, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		if description.Valid {
@@ -416,6 +427,10 @@ func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, erro
 		}
 		if assigneeID.Valid {
 			t.AssigneeID = &assigneeID.String
+		}
+		if priority.Valid {
+			p := int(priority.Int64)
+			t.Priority = &p
 		}
 		if workOutcomes.Valid {
 			t.WorkOutcomesJSON = &workOutcomes.String

@@ -212,10 +212,14 @@ attestations:
       description: "Iteration approved"
     workshop.discovery.completed:
       description: "Discovery workshop completed"
+    workshop.problem_refinement.completed:
+      description: "Problem refinement workshop completed"
+    workshop.eventstorming.completed:
+      description: "Event storming workshop completed"
     workshop.decision.completed:
       description: "Decision workshop completed"
-    workshop.brainstorm.completed:
-      description: "Brainstorm workshop completed"
+    workshop.clarify.completed:
+      description: "Clarification workshop completed"
 
 policies:
   presets:
@@ -240,11 +244,17 @@ policies:
     workshop.discovery:
       require: [workshop.discovery.completed]
 
+    workshop.problem_refinement:
+      require: [workshop.problem_refinement.completed]
+
+    workshop.eventstorming:
+      require: [workshop.eventstorming.completed]
+
     workshop.decision:
       require: [workshop.decision.completed]
 
-    workshop.brainstorm:
-      require: [workshop.brainstorm.completed]
+    workshop.clarify:
+      require: [workshop.clarify.completed]
 
   defaults:
     task:
@@ -253,7 +263,7 @@ policies:
       technical: done.standard
       docs: low
       chore: low
-      workshop: workshop.discovery
+      workshop: workshop.problem_refinement
 
     iteration:
       validation:

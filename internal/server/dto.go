@@ -30,6 +30,7 @@ type CreateTaskRequest struct {
 	Title        string                 `json:"title" example:"Ship authentication"`
 	Description  *string                `json:"description,omitempty" example:"Implement login and SSO flows"`
 	AssigneeID   *string                `json:"assignee_id,omitempty" example:"dev-1"`
+	Priority     *int                   `json:"priority,omitempty" example:"1"`
 	DependsOn    []string               `json:"depends_on,omitempty" example:"[\"task-seed\"]"`
 	Policy       *TaskPolicyRequest     `json:"policy,omitempty"`
 	Validation   *TaskValidationRequest `json:"validation,omitempty"`
@@ -46,6 +47,7 @@ type UpdateTaskRequest struct {
 	AddDependsOn    []string                     `json:"add_depends_on,omitempty"`
 	RemoveDependsOn []string                     `json:"remove_depends_on,omitempty"`
 	ParentID        *string                      `json:"parent_id,omitempty"`
+	Priority        *int                         `json:"priority,omitempty"`
 	WorkOutcomes    *map[string]any              `json:"work_outcomes,omitempty"`
 	Validation      *UpdateTaskValidationRequest `json:"validation,omitempty"`
 }
@@ -128,6 +130,7 @@ type TaskResponse struct {
 	Description          string         `json:"description,omitempty" example:"Implement login and SSO flows"`
 	Status               string         `json:"status" enum:"planned,in_progress,review,done,rejected,canceled" example:"planned"`
 	AssigneeID           *string        `json:"assignee_id,omitempty" example:"dev-1"`
+	Priority             *int           `json:"priority,omitempty" example:"1"`
 	WorkOutcomes         map[string]any `json:"work_outcomes,omitempty" example:"{\"pr\":123}"`
 	RequiredAttestations []string       `json:"required_attestations" example:"[\"ci.passed\",\"review.approved\"]"`
 	DependsOn            []string       `json:"depends_on" example:"[]"`
@@ -312,6 +315,7 @@ func taskResponse(t domain.Task) TaskResponse {
 		Description:          t.Description,
 		Status:               t.Status,
 		AssigneeID:           t.AssigneeID,
+		Priority:             t.Priority,
 		WorkOutcomes:         workOutcomes,
 		RequiredAttestations: nonNilSlice(req),
 		DependsOn:            nonNilSlice(t.DependsOn),

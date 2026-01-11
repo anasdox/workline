@@ -651,6 +651,9 @@ func registerTasks(api huma.API, e engine.Engine) {
 		if input.Body.AssigneeID != nil {
 			opts.AssigneeID = *input.Body.AssigneeID
 		}
+		if input.Body.Priority != nil {
+			opts.Priority = input.Body.Priority
+		}
 		if input.Body.Policy != nil {
 			opts.PolicyPreset = input.Body.Policy.Preset
 		} else if rawPolicy, ok := bodyMap["policy"]; ok {
@@ -818,6 +821,21 @@ func registerTasks(api huma.API, e engine.Engine) {
 		if _, ok := bodyMap["parent_id"]; ok {
 			opts.ParentProvided = true
 			opts.SetParent = input.Body.ParentID
+		}
+		if rawPriority, ok := bodyMap["priority"]; ok {
+			opts.PriorityProvided = true
+			if isNullRaw(rawPriority) {
+				opts.ClearPriority = true
+			} else {
+				if input.Body.Priority == nil {
+					var parsed int
+					if err := json.Unmarshal(rawPriority, &parsed); err == nil {
+						opts.SetPriority = &parsed
+					}
+				} else {
+					opts.SetPriority = input.Body.Priority
+				}
+			}
 		}
 		if _, ok := bodyMap["work_outcomes"]; ok {
 			opts.WorkOutcomesSet = true

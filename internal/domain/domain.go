@@ -29,6 +29,7 @@ type Task struct {
 	Description              string   `json:"description,omitempty"`
 	Status                   string   `json:"status" enum:"planned,in_progress,review,done,rejected,canceled"`
 	AssigneeID               *string  `json:"assignee_id,omitempty"`
+	Priority                 *int     `json:"priority,omitempty"`
 	WorkOutcomesJSON         *string  `json:"work_outcomes_json,omitempty"`
 	RequiredAttestationsJSON *string  `json:"required_attestations_json,omitempty"`
 	DependsOn                []string `json:"depends_on,omitempty"`

@@ -1292,7 +1292,7 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 	}
 	for kind, roles := range authorities {
 		for _, role := range roles {
-			if err := e.Repo.AllowAttestationRole(ctx, tx, orgID, projectID, kind, role); err != nil {
+			if err := e.Repo.AllowAttestationRole(ctx, tx, projectID, kind, role); err != nil {
 				return err
 			}
 		}

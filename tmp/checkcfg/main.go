@@ -33,7 +33,7 @@ func main() {
 	}
 	cfg := config.Default("workline")
 	e := engine.New(conn, cfg)
-	if _, err := e.InitProject(context.Background(), cfg.Project.ID, "", "tester"); err != nil {
+	if _, err := e.InitProject(context.Background(), cfg.Project.ID, "default-org", "", "tester"); err != nil {
 		panic(err)
 	}
 	if err := e.Repo.UpsertProjectConfig(context.Background(), cfg.Project.ID, cfg); err != nil {

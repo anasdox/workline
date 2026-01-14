@@ -11,7 +11,6 @@ type Project struct {
 
 type Iteration struct {
 	ID        string `json:"id"`
-	OrgID     string `json:"org_id"`
 	ProjectID string `json:"project_id"`
 	Goal      string `json:"goal"`
 	Status    string `json:"status" enum:"pending,running,delivered,validated,rejected"`
@@ -20,7 +19,6 @@ type Iteration struct {
 
 type Task struct {
 	ID                       string   `json:"id"`
-	OrgID                    string   `json:"org_id"`
 	ProjectID                string   `json:"project_id"`
 	IterationID              *string  `json:"iteration_id,omitempty"`
 	ParentID                 *string  `json:"parent_id,omitempty"`
@@ -40,7 +38,6 @@ type Task struct {
 
 type Decision struct {
 	ID               string `json:"id"`
-	OrgID            string `json:"org_id"`
 	ProjectID        string `json:"project_id"`
 	Title            string `json:"title"`
 	ContextJSON      string `json:"context_json,omitempty"`
@@ -60,7 +57,6 @@ type Lease struct {
 
 type Attestation struct {
 	ID          string `json:"id"`
-	OrgID       string `json:"org_id"`
 	ProjectID   string `json:"project_id"`
 	EntityKind  string `json:"entity_kind"`
 	EntityID    string `json:"entity_id"`
@@ -72,7 +68,6 @@ type Attestation struct {
 
 type Event struct {
 	ID         int64  `json:"id"`
-	OrgID      string `json:"org_id"`
 	TS         string `json:"ts" format:"date-time"`
 	Type       string `json:"type"`
 	ProjectID  string `json:"project_id,omitempty"`
@@ -85,7 +80,6 @@ type Event struct {
 type APIKey struct {
 	ID        string `json:"id"`
 	ActorID   string `json:"actor_id"`
-	OrgID     string `json:"org_id"`
 	Name      string `json:"name,omitempty"`
 	KeyHash   string `json:"key_hash"`
 	CreatedAt string `json:"created_at" format:"date-time"`

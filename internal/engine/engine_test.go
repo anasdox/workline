@@ -31,7 +31,7 @@ func newTestEnv(t *testing.T) testEnv {
 	eng := engine.New(conn, cfg)
 	eng.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
 	ctx := context.Background()
-	if _, err := eng.InitProject(ctx, "proj-1", "test", "tester"); err != nil {
+	if _, err := eng.InitProject(ctx, "proj-1", "org-1", "test", "tester"); err != nil {
 		t.Fatalf("init project: %v", err)
 	}
 	if err := eng.Repo.UpsertProjectConfig(ctx, "proj-1", cfg); err != nil {
@@ -228,7 +228,7 @@ func TestSeedRBACFromConfig(t *testing.T) {
 	eng := engine.New(conn, cfg)
 	eng.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
 	ctx := context.Background()
-	if _, err := eng.InitProject(ctx, "proj-1", "test", "tester"); err != nil {
+	if _, err := eng.InitProject(ctx, "proj-1", "org-1", "test", "tester"); err != nil {
 		t.Fatalf("init project: %v", err)
 	}
 	tx, err := conn.BeginTx(ctx, nil)

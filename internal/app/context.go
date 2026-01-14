@@ -29,7 +29,11 @@ func ResolveProjectAndConfig(ctx context.Context, workspace, projectOverride, ac
 		if !errors.Is(err, repo.ErrNotFound) {
 			return "", nil, err
 		}
-		if err := createProject(ctx, r, projectID, seedCfg, actorID); err != nil {
+		orgID := os.Getenv("WORKLINE_DEFAULT_ORG_ID")
+		if orgID == "" {
+			return "", nil, fmt.Errorf("org_id is required; set WORKLINE_DEFAULT_ORG_ID")
+		}
+		if err := createProject(ctx, r, projectID, orgID, seedCfg, actorID); err != nil {
 			return "", nil, err
 		}
 	}
@@ -49,7 +53,7 @@ func ResolveProjectAndConfig(ctx context.Context, workspace, projectOverride, ac
 }
 
 // createProject inserts a minimal project/org/rbac footprint using the seed config.
-func createProject(ctx context.Context, r repo.Repo, projectID string, seedCfg *config.Config, actorID string) error {
+func createProject(ctx context.Context, r repo.Repo, projectID, orgID string, seedCfg *config.Config, actorID string) error {
 	if seedCfg == nil {
 		seedCfg = config.Default(projectID)
 	}
@@ -59,7 +63,6 @@ func createProject(ctx context.Context, r repo.Repo, projectID string, seedCfg *
 		return err
 	}
 	defer tx.Rollback()
-	orgID := "default-org"
 	p := domain.Project{
 		ID:          projectID,
 		OrgID:       orgID,

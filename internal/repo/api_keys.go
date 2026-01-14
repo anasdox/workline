@@ -26,9 +26,6 @@ func (r Repo) InsertAPIKey(ctx context.Context, tx *sql.Tx, key domain.APIKey) e
 	if key.ActorID == "" {
 		return errors.New("actor_id required")
 	}
-	if key.OrgID == "" {
-		key.OrgID = "default-org"
-	}
 	if key.KeyHash == "" {
 		return errors.New("key_hash required")
 	}
@@ -41,17 +38,17 @@ func (r Repo) InsertAPIKey(ctx context.Context, tx *sql.Tx, key domain.APIKey) e
 	if key.CreatedAt == "" {
 		key.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	_, err := exec(`INSERT INTO api_keys(id, actor_id, org_id, name, key_hash, created_at) VALUES (?,?,?,?,?,?)`,
-		key.ID, key.ActorID, key.OrgID, nullable(key.Name), key.KeyHash, key.CreatedAt)
+	_, err := exec(`INSERT INTO api_keys(id, actor_id, name, key_hash, created_at) VALUES (?,?,?,?,?)`,
+		key.ID, key.ActorID, nullable(key.Name), key.KeyHash, key.CreatedAt)
 	return err
 }
 
 // GetAPIKeyByHash returns an API key by its hashed value.
 func (r Repo) GetAPIKeyByHash(ctx context.Context, hash string) (domain.APIKey, error) {
-	row := r.DB.QueryRowContext(ctx, `SELECT id, actor_id, org_id, COALESCE(name,''), key_hash, created_at FROM api_keys WHERE key_hash=? LIMIT 1`, hash)
+	row := r.DB.QueryRowContext(ctx, `SELECT id, actor_id, COALESCE(name,''), key_hash, created_at FROM api_keys WHERE key_hash=? LIMIT 1`, hash)
 	var key domain.APIKey
 	var name string
-	err := row.Scan(&key.ID, &key.ActorID, &key.OrgID, &name, &key.KeyHash, &key.CreatedAt)
+	err := row.Scan(&key.ID, &key.ActorID, &name, &key.KeyHash, &key.CreatedAt)
 	if err == sql.ErrNoRows {
 		return domain.APIKey{}, ErrNotFound
 	}

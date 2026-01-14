@@ -26,8 +26,6 @@ type Engine struct {
 	Auth   auth.Service
 }
 
-const defaultOrgID = "default-org"
-
 func New(db *sql.DB, cfg *config.Config) Engine {
 	return Engine{
 		DB:     db,
@@ -47,14 +45,16 @@ func (e Engine) now() time.Time {
 }
 
 // InitProject initializes a new project with migrations already run.
-func (e Engine) InitProject(ctx context.Context, projectID, description, actorID string) (domain.Project, error) {
+func (e Engine) InitProject(ctx context.Context, projectID, orgID, description, actorID string) (domain.Project, error) {
 	tx, err := e.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.Project{}, err
 	}
 	defer tx.Rollback()
 
-	orgID := defaultOrgID
+	if orgID == "" {
+		return domain.Project{}, errors.New("org_id is required")
+	}
 	p := domain.Project{
 		ID:          projectID,
 		OrgID:       orgID,
@@ -1292,7 +1292,7 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 	}
 	for kind, roles := range authorities {
 		for _, role := range roles {
-			if err := e.Repo.AllowAttestationRole(ctx, tx, projectID, kind, role); err != nil {
+			if err := e.Repo.AllowAttestationRole(ctx, tx, orgID, projectID, kind, role); err != nil {
 				return err
 			}
 		}

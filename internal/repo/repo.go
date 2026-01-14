@@ -83,14 +83,14 @@ func (r Repo) ListProjects(ctx context.Context) ([]domain.Project, error) {
 }
 
 func (r Repo) InsertIteration(ctx context.Context, it domain.Iteration) error {
-	_, err := r.DB.ExecContext(ctx, `INSERT INTO iterations(id,org_id,project_id,goal,status,created_at) VALUES (?,?,?,?,?,?)`,
-		it.ID, it.OrgID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
+	_, err := r.DB.ExecContext(ctx, `INSERT INTO iterations(id,project_id,goal,status,created_at) VALUES (?,?,?,?,?)`,
+		it.ID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
 	return err
 }
 
 func (r Repo) InsertIterationTx(ctx context.Context, tx *sql.Tx, it domain.Iteration) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO iterations(id,org_id,project_id,goal,status,created_at) VALUES (?,?,?,?,?,?)`,
-		it.ID, it.OrgID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
+	_, err := tx.ExecContext(ctx, `INSERT INTO iterations(id,project_id,goal,status,created_at) VALUES (?,?,?,?,?)`,
+		it.ID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
 	return err
 }
 
@@ -612,7 +612,7 @@ func (r Repo) ListAttestations(ctx context.Context, f AttestationFilters) ([]dom
 	if len(clauses) > 0 {
 		where = "WHERE " + strings.Join(clauses, " AND ")
 	}
-	query := `SELECT id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json FROM attestations ` + where + ` ORDER BY ts DESC, id DESC`
+query := `SELECT id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json FROM attestations ` + where + ` ORDER BY ts DESC, id DESC`
 	if f.Limit > 0 {
 		query += " LIMIT ?"
 		args = append(args, f.Limit)
@@ -656,9 +656,9 @@ func (r Repo) CountTasksByStatus(ctx context.Context, projectID string) (map[str
 }
 
 func (r Repo) LatestRunningIteration(ctx context.Context, projectID string) (*domain.Iteration, error) {
-	row := r.DB.QueryRowContext(ctx, `SELECT id,project_id,goal,status,created_at FROM iterations WHERE project_id=? AND status='running' ORDER BY created_at DESC LIMIT 1`, projectID)
+row := r.DB.QueryRowContext(ctx, `SELECT id,project_id,goal,status,created_at FROM iterations WHERE project_id=? AND status='running' ORDER BY created_at DESC LIMIT 1`, projectID)
 	var it domain.Iteration
-	err := row.Scan(&it.ID, &it.ProjectID, &it.Goal, &it.Status, &it.CreatedAt)
+err := row.Scan(&it.ID, &it.ProjectID, &it.Goal, &it.Status, &it.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -696,7 +696,7 @@ func (r Repo) LatestEventsFrom(ctx context.Context, limit int, cursor int64, pro
 		args = append(args, cursor)
 	}
 	where := "WHERE " + strings.Join(clauses, " AND ")
-	query := fmt.Sprintf(`SELECT id,ts,type,project_id,entity_kind,entity_id,actor_id,payload_json FROM events %s ORDER BY id DESC LIMIT ?`, where)
+query := fmt.Sprintf(`SELECT id,ts,type,project_id,entity_kind,entity_id,actor_id,payload_json FROM events %s ORDER BY id DESC LIMIT ?`, where)
 	args = append(args, limit)
 	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {

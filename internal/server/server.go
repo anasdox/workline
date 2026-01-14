@@ -429,6 +429,9 @@ func registerProjects(api huma.API, e engine.Engine) {
 		if input.Body.ID == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "id is required", nil)
 		}
+		if input.Body.OrgID == "" {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "org_id is required", nil)
+		}
 		if err := requireGlobalPermission(ctx, e, "project.create"); err != nil {
 			return nil, handleError(err)
 		}
@@ -440,7 +443,7 @@ func registerProjects(api huma.API, e engine.Engine) {
 		if input.Body.Description != nil {
 			desc = *input.Body.Description
 		}
-		p, err := e.InitProject(ctx, input.Body.ID, desc, actorID)
+		p, err := e.InitProject(ctx, input.Body.ID, input.Body.OrgID, desc, actorID)
 		if err != nil {
 			return nil, handleError(err)
 		}

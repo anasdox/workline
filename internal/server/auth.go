@@ -56,7 +56,7 @@ func actorIDFromContext(ctx context.Context) (string, huma.StatusError) {
 }
 
 func principalFromRequest(ctx context.Context) (Principal, huma.StatusError) {
-	if p, ok := principalFromContext(ctx); ok && p.ActorID != "" && p.OrgID != "" {
+	if p, ok := principalFromContext(ctx); ok && p.ActorID != "" {
 		return p, nil
 	}
 	return Principal{}, newAPIError(http.StatusUnauthorized, "unauthorized", "authentication required", nil)
@@ -113,7 +113,6 @@ func authenticateAPIKey(ctx context.Context, r repo.Repo, key string) (Principal
 	}
 	return Principal{
 		ActorID: apiKey.ActorID,
-		OrgID:   apiKey.OrgID,
 		Source:  "api_key",
 	}, nil
 }

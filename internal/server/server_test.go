@@ -81,7 +81,7 @@ func newTestServerWithAuth(t *testing.T, authCfg AuthConfig) (*testServer, func(
 	}
 	orgID := "default-org"
 	e := engine.New(conn, cfg)
-	if _, err := e.InitProject(context.Background(), cfg.Project.ID, "", "tester"); err != nil {
+	if _, err := e.InitProject(context.Background(), cfg.Project.ID, "default-org", "", "tester"); err != nil {
 		t.Fatalf("init project: %v", err)
 	}
 	if err := e.Repo.UpsertProjectConfig(context.Background(), cfg.Project.ID, cfg); err != nil {
@@ -91,7 +91,6 @@ func newTestServerWithAuth(t *testing.T, authCfg AuthConfig) (*testServer, func(
 	if err := e.Repo.InsertAPIKey(context.Background(), nil, domain.APIKey{
 		ID:      "test-key",
 		ActorID: "tester",
-		OrgID:   orgID,
 		KeyHash: repo.HashAPIKey(apiKeyValue),
 	}); err != nil {
 		t.Fatalf("insert api key: %v", err)
@@ -354,6 +353,7 @@ func TestPermissionGates(t *testing.T) {
 
 	createProjectRes, createProjectBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects", map[string]any{
 		"id": "perm-project",
+		"org_id": "default-org",
 	}, nil)
 	if createProjectRes.StatusCode != http.StatusCreated {
 		t.Fatalf("create project: %d %s", createProjectRes.StatusCode, string(createProjectBody))
@@ -382,7 +382,7 @@ func TestPermissionGates(t *testing.T) {
 		perm string
 	}{
 		{"project list", http.MethodGet, srv.URL + "/v0/projects", nil, "project.list"},
-		{"project create", http.MethodPost, srv.URL + "/v0/projects", map[string]any{"id": "blocked-project"}, "project.create"},
+		{"project create", http.MethodPost, srv.URL + "/v0/projects", map[string]any{"id": "blocked-project", "org_id": "default-org"}, "project.create"},
 		{"project read", http.MethodGet, srv.URL + "/v0/projects/perm-project", nil, "project.read"},
 		{"project update", http.MethodPatch, srv.URL + "/v0/projects/perm-project", map[string]any{"description": "blocked"}, "project.update"},
 		{"project delete", http.MethodDelete, srv.URL + "/v0/projects/perm-project", nil, "project.delete"},

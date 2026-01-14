@@ -123,7 +123,7 @@ func projectListCmd() *cobra.Command {
 }
 
 func projectCreateCmd() *cobra.Command {
-	var id, desc string
+	var id, orgID, desc string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create project",
@@ -145,7 +145,7 @@ func projectCreateCmd() *cobra.Command {
 			}
 			cfg := config.Default(id)
 			e := engine.New(conn, cfg)
-			p, err := e.InitProject(cmd.Context(), id, desc, viper.GetString("actor-id"))
+			p, err := e.InitProject(cmd.Context(), id, orgID, desc, viper.GetString("actor-id"))
 			if err != nil {
 				return err
 			}
@@ -156,8 +156,10 @@ func projectCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&id, "id", "", "project id")
+	cmd.Flags().StringVar(&orgID, "org-id", "", "organization id")
 	cmd.Flags().StringVar(&desc, "description", "", "description")
 	_ = cmd.MarkFlagRequired("id")
+	_ = cmd.MarkFlagRequired("org-id")
 	return cmd
 }
 

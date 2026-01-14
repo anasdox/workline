@@ -85,5 +85,23 @@ func Migrate(db *sql.DB) error {
 		}
 		currentVersion = m.Version
 	}
+	if exists, err := tableExists(tx, "organizations"); err != nil {
+		return fmt.Errorf("check organizations table: %w", err)
+	} else if exists {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO organizations(id, name, created_at) VALUES ('default-org','Default Org',strftime('%Y-%m-%dT%H:%M:%SZ','now'))`); err != nil {
+			return fmt.Errorf("seed default org: %w", err)
+		}
+	}
 	return tx.Commit()
+}
+
+func tableExists(tx *sql.Tx, table string) (bool, error) {
+	var name sql.NullString
+	if err := tx.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&name); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return name.Valid, nil
 }

@@ -747,6 +747,260 @@ func registerTasks(api huma.API, e engine.Engine) {
 	})
 
 	huma.Register(api, huma.Operation{
+		OperationID: "next-task",
+		Method:      http.MethodGet,
+		Path:        "/projects/{project_id}/tasks/next",
+		Summary:     "Get next task for an actor",
+		Errors:      []int{http.StatusNotFound, http.StatusBadRequest},
+	}, func(ctx context.Context, input *struct {
+		ProjectID         string `path:"project_id"`
+		IterationID       string `query:"iteration_id"`
+		AssigneeID        string `query:"assignee_id"`
+		IncludeUnassigned bool   `query:"include_unassigned" default:"true"`
+	}) (*struct {
+		Body TaskResponse `json:"body"`
+	}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := requirePermission(ctx, e, projectID, "task.next"); err != nil {
+			return nil, handleError(err)
+		}
+		iterationID := input.IterationID
+		if iterationID == "" {
+			items, err := e.Repo.ListIterationsWithCursor(ctx, projectID, 50, "", "")
+			if err != nil {
+				return nil, handleError(err)
+			}
+			for _, it := range items {
+				if it.Status == "running" {
+					iterationID = it.ID
+					break
+				}
+			}
+		}
+		if iterationID == "" {
+			return nil, newAPIError(http.StatusNotFound, "not_found", "no running iteration found", nil)
+		}
+		assigneeID := input.AssigneeID
+		if assigneeID == "" {
+			actorID, err := actorIDFromContext(ctx)
+			if err != nil {
+				return nil, err
+			}
+			assigneeID = actorID
+		}
+		t, err := e.Repo.NextTask(ctx, repo.NextTaskFilters{
+			ProjectID:         projectID,
+			IterationID:       iterationID,
+			AssigneeID:        assigneeID,
+			IncludeUnassigned: input.IncludeUnassigned,
+		})
+		if err != nil {
+			return nil, handleError(err)
+		}
+		if !projectMatches(input.ProjectID, t.ProjectID) {
+			return nil, newAPIError(http.StatusNotFound, "not_found", "task not found in project", nil)
+		}
+		return &struct {
+			Body TaskResponse `json:"body"`
+		}{Body: taskResponse(t)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "decompose-task",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/tasks/{id}/decompose",
+		Summary:     "Decompose task into subtasks",
+		DefaultStatus: http.StatusCreated,
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string               `path:"project_id"`
+		ID        string               `path:"id"`
+		Body      DecomposeTaskRequest `json:"body"`
+	}) (*struct {
+		Body DecomposeTaskResponse `json:"body"`
+	}, error) {
+		if len(bodyBytes(ctx)) == 0 {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		if len(input.Body.Subtasks) == 0 {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "subtasks is required", map[string]any{"field": "subtasks"})
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		parent, err := e.Repo.GetTask(ctx, input.ID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		if !projectMatches(input.ProjectID, parent.ProjectID) {
+			return nil, newAPIError(http.StatusNotFound, "not_found", "task not found in project", nil)
+		}
+		localMap := make(map[string]struct{})
+		for _, st := range input.Body.Subtasks {
+			if st.LocalID != nil {
+				if _, ok := localMap[*st.LocalID]; ok {
+					return nil, newAPIError(http.StatusBadRequest, "bad_request", "duplicate local_id", map[string]any{"local_id": *st.LocalID})
+				}
+				localMap[*st.LocalID] = struct{}{}
+			}
+		}
+		created := make([]domain.Task, 0, len(input.Body.Subtasks))
+		mapping := map[string]string{}
+		type pendingDeps struct {
+			TaskID string
+			Deps   []string
+		}
+		var pending []pendingDeps
+		for _, st := range input.Body.Subtasks {
+			if st.Title == "" {
+				return nil, newAPIError(http.StatusBadRequest, "bad_request", "title is required", map[string]any{"field": "title"})
+			}
+			taskType := st.Type
+			if taskType == "" {
+				taskType = "technical"
+			}
+			opts := engine.TaskCreateOptions{
+				ProjectID:   projectID,
+				Type:        taskType,
+				Title:       st.Title,
+				ActorID:     actorID,
+				Description: stringOrEmpty(st.Description),
+				ParentID:    parent.ID,
+			}
+			if st.ID != nil {
+				opts.ID = *st.ID
+			}
+			if st.IterationID != nil {
+				opts.IterationID = *st.IterationID
+			} else if parent.IterationID != nil {
+				opts.IterationID = *parent.IterationID
+			}
+			if st.AssigneeID != nil {
+				opts.AssigneeID = *st.AssigneeID
+			}
+			if st.Priority != nil {
+				opts.Priority = st.Priority
+			}
+			if st.Policy != nil {
+				opts.PolicyPreset = st.Policy.Preset
+			}
+			if st.Validation != nil {
+				opts.PolicyOverride = true
+				opts.RequiredKinds = st.Validation.Require
+			}
+			if st.WorkOutcomes != nil {
+				b, err := json.Marshal(st.WorkOutcomes)
+				if err != nil {
+					return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid work_outcomes", map[string]any{"error": err.Error()})
+				}
+				asStr := string(b)
+				opts.WorkOutcomesJSON = &asStr
+			}
+			t, err := e.CreateTask(ctx, opts)
+			if err != nil {
+				return nil, handleError(err)
+			}
+			if st.LocalID != nil {
+				mapping[*st.LocalID] = t.ID
+			}
+			if len(st.DependsOn) > 0 {
+				pending = append(pending, pendingDeps{TaskID: t.ID, Deps: st.DependsOn})
+			}
+			created = append(created, t)
+		}
+		for _, entry := range pending {
+			var resolved []string
+			for _, dep := range entry.Deps {
+				if mapped, ok := mapping[dep]; ok {
+					resolved = append(resolved, mapped)
+				} else {
+					resolved = append(resolved, dep)
+				}
+			}
+			if len(resolved) == 0 {
+				continue
+			}
+			_, err := e.UpdateTask(ctx, engine.TaskUpdateOptions{
+				ID:      entry.TaskID,
+				ActorID: actorID,
+				AddDeps: resolved,
+			})
+			if err != nil {
+				return nil, handleError(err)
+			}
+		}
+		resp := DecomposeTaskResponse{
+			Parent:   taskResponse(parent),
+			Subtasks: mapTasks(created),
+		}
+		if len(mapping) > 0 {
+			resp.Mapping = mapping
+		}
+		return &struct {
+			Body DecomposeTaskResponse `json:"body"`
+		}{Body: resp}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "compose-task",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/tasks/{id}/compose",
+		Summary:     "Compose a task result",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusInternalServerError,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string             `path:"project_id"`
+		ID        string             `path:"id"`
+		Body      ComposeTaskRequest `json:"body"`
+	}) (*struct {
+		Body TaskResponse `json:"body"`
+	}, error) {
+		if len(bodyBytes(ctx)) == 0 {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		if input.Body.Result == "" && input.Body.Summary == nil && input.Body.WorkOutcomes == nil {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "result or work_outcomes is required", nil)
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		task, _, err := mutateWorkOutcomes(ctx, e, projectID, input.ID, actorID, func(workOutcomes map[string]any) (*int, error) {
+			if input.Body.Result != "" {
+				workOutcomes["output"] = input.Body.Result
+			}
+			if input.Body.Summary != nil {
+				workOutcomes["summary"] = *input.Body.Summary
+			}
+			for key, val := range input.Body.WorkOutcomes {
+				workOutcomes[key] = val
+			}
+			return nil, nil
+		})
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body TaskResponse `json:"body"`
+		}{Body: taskResponse(task)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
 		OperationID: "get-task",
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/tasks/{id}",

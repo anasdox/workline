@@ -367,6 +367,13 @@ type TaskFilters struct {
 	CursorID        string
 }
 
+type NextTaskFilters struct {
+	ProjectID         string
+	IterationID       string
+	AssigneeID        string
+	IncludeUnassigned bool
+}
+
 func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, error) {
 	var clauses []string
 	var args []any
@@ -444,6 +451,89 @@ func (r Repo) ListTasks(ctx context.Context, f TaskFilters) ([]domain.Task, erro
 		res = append(res, t)
 	}
 	return res, nil
+}
+
+func (r Repo) NextTask(ctx context.Context, f NextTaskFilters) (domain.Task, error) {
+	var t domain.Task
+	if f.ProjectID == "" || f.IterationID == "" {
+		return t, ErrNotFound
+	}
+	clauses := []string{"project_id=?", "iteration_id=?", "status=?"}
+	args := []any{f.ProjectID, f.IterationID, "planned"}
+	if f.AssigneeID != "" {
+		if f.IncludeUnassigned {
+			clauses = append(clauses, "(assignee_id=? OR assignee_id IS NULL)")
+			args = append(args, f.AssigneeID)
+		} else {
+			clauses = append(clauses, "assignee_id=?")
+			args = append(args, f.AssigneeID)
+		}
+	} else if !f.IncludeUnassigned {
+		clauses = append(clauses, "assignee_id IS NOT NULL")
+	}
+	clauses = append(clauses, `NOT EXISTS (
+		SELECT 1 FROM task_deps d
+		JOIN tasks dep ON dep.id=d.depends_on_task_id
+		WHERE d.task_id=tasks.id AND dep.status != 'done'
+	)`)
+	where := "WHERE " + strings.Join(clauses, " AND ")
+	order := `ORDER BY
+		CASE WHEN assignee_id = ? THEN 0 ELSE 1 END,
+		CASE WHEN priority IS NULL THEN 1 ELSE 0 END,
+		priority ASC,
+		created_at ASC,
+		id ASC`
+	if f.AssigneeID == "" {
+		order = `ORDER BY
+			CASE WHEN priority IS NULL THEN 1 ELSE 0 END,
+			priority ASC,
+			created_at ASC,
+			id ASC`
+	} else {
+		args = append(args, f.AssigneeID)
+	}
+	query := `SELECT id,project_id,iteration_id,parent_id,type,title,description,status,assignee_id,priority,work_outcomes_json,required_attestations_json,created_at,updated_at,completed_at FROM tasks ` + where + " " + order + " LIMIT 1"
+	var iterationID, parentID, assigneeID, workOutcomes, requiredAtt, completedAt, description sql.NullString
+	var priority sql.NullInt64
+	err := r.DB.QueryRowContext(ctx, query, args...).
+		Scan(&t.ID, &t.ProjectID, &iterationID, &parentID, &t.Type, &t.Title, &description, &t.Status, &assigneeID, &priority, &workOutcomes, &requiredAtt, &t.CreatedAt, &t.UpdatedAt, &completedAt)
+	if err == sql.ErrNoRows {
+		return t, ErrNotFound
+	}
+	if err != nil {
+		return t, err
+	}
+	if description.Valid {
+		t.Description = description.String
+	}
+	if iterationID.Valid {
+		t.IterationID = &iterationID.String
+	}
+	if parentID.Valid {
+		t.ParentID = &parentID.String
+	}
+	if assigneeID.Valid {
+		t.AssigneeID = &assigneeID.String
+	}
+	if priority.Valid {
+		p := int(priority.Int64)
+		t.Priority = &p
+	}
+	if workOutcomes.Valid {
+		t.WorkOutcomesJSON = &workOutcomes.String
+	}
+	if requiredAtt.Valid {
+		t.RequiredAttestationsJSON = &requiredAtt.String
+	}
+	if completedAt.Valid {
+		t.CompletedAt = &completedAt.String
+	}
+	deps, err := r.ListTaskDependencies(ctx, t.ID)
+	if err != nil {
+		return t, err
+	}
+	t.DependsOn = deps
+	return t, nil
 }
 
 func (r Repo) ListTaskDependencies(ctx context.Context, taskID string) ([]string, error) {

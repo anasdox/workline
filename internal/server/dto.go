@@ -38,6 +38,37 @@ type CreateTaskRequest struct {
 	WorkOutcomes map[string]any         `json:"work_outcomes,omitempty" example:"{\"pr\":123}"`
 }
 
+type SubtaskRequest struct {
+	ID           *string                `json:"id,omitempty" example:"task-auth-1-1"`
+	LocalID      *string                `json:"local_id,omitempty" example:"auth-ui"`
+	IterationID  *string                `json:"iteration_id,omitempty" example:"iter-1"`
+	Type         string                 `json:"type,omitempty" enum:"technical,feature,bug,docs,chore,workshop" example:"feature"`
+	Title        string                 `json:"title" example:"Ship authentication UI"`
+	Description  *string                `json:"description,omitempty" example:"Build login screens and flows"`
+	AssigneeID   *string                `json:"assignee_id,omitempty" example:"dev-1"`
+	Priority     *int                   `json:"priority,omitempty" example:"1"`
+	DependsOn    []string               `json:"depends_on,omitempty" example:"[\"auth-api\"]"`
+	Policy       *TaskPolicyRequest     `json:"policy,omitempty"`
+	Validation   *TaskValidationRequest `json:"validation,omitempty"`
+	WorkOutcomes map[string]any         `json:"work_outcomes,omitempty" example:"{\"spec\":\"done\"}"`
+}
+
+type DecomposeTaskRequest struct {
+	Subtasks []SubtaskRequest `json:"subtasks"`
+}
+
+type DecomposeTaskResponse struct {
+	Parent   TaskResponse       `json:"parent"`
+	Subtasks []TaskResponse     `json:"subtasks"`
+	Mapping  map[string]string  `json:"mapping,omitempty"`
+}
+
+type ComposeTaskRequest struct {
+	Result       string         `json:"result" example:"Summary of task outcomes"`
+	Summary      *string        `json:"summary,omitempty" example:"Short summary"`
+	WorkOutcomes map[string]any `json:"work_outcomes,omitempty" example:"{\"prd\":\"...\"}"`
+}
+
 type UpdateTaskValidationRequest struct {
 	Require []string `json:"require,omitempty"`
 }

@@ -966,6 +966,168 @@
         },
         "type": "object"
       },
+      "SubtaskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assignee_id": {
+            "examples": [
+              "dev-1"
+            ],
+            "type": "string"
+          },
+          "depends_on": {
+            "examples": [
+              [
+                "auth-api"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "examples": [
+              "Build login screens and flows"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "examples": [
+              "task-auth-1-1"
+            ],
+            "type": "string"
+          },
+          "iteration_id": {
+            "examples": [
+              "iter-1"
+            ],
+            "type": "string"
+          },
+          "local_id": {
+            "examples": [
+              "auth-ui"
+            ],
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/TaskPolicyRequest"
+          },
+          "priority": {
+            "examples": [
+              1
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "examples": [
+              "Ship authentication UI"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "technical",
+              "feature",
+              "bug",
+              "docs",
+              "chore",
+              "workshop"
+            ],
+            "examples": [
+              "feature"
+            ],
+            "type": "string"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/TaskValidationRequest"
+          },
+          "work_outcomes": {
+            "additionalProperties": true,
+            "examples": [
+              {
+                "spec": "done"
+              }
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "DecomposeTaskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "subtasks": {
+            "items": {
+              "$ref": "#/components/schemas/SubtaskRequest"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "subtasks"
+        ],
+        "type": "object"
+      },
+      "DecomposeTaskResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "mapping": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/TaskResponse"
+          },
+          "subtasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "parent",
+          "subtasks"
+        ],
+        "type": "object"
+      },
+      "ComposeTaskRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "examples": [
+              "Summary of task outcomes"
+            ],
+            "type": "string"
+          },
+          "summary": {
+            "examples": [
+              "Short summary"
+            ],
+            "type": "string"
+          },
+          "work_outcomes": {
+            "additionalProperties": true,
+            "examples": [
+              {
+                "prd": "..."
+              }
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "type": "object"
+      },
       "TaskResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3626,6 +3788,117 @@
           }
         ],
         "summary": "Create task"
+      }
+    },
+    "/v0/projects/{project_id}/tasks/next": {
+      "get": {
+        "operationId": "next-task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "iteration_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "assignee_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "include_unassigned",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get next task for an actor"
       }
     },
     "/v0/projects/{project_id}/tasks/tree": {

@@ -132,6 +132,47 @@ class WorklineClient:
             for item in items
         ]
 
+    def next_task(
+        self,
+        iteration_id: Optional[str] = None,
+        assignee_id: Optional[str] = None,
+        include_unassigned: bool = True,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {}
+        if iteration_id:
+            params["iteration_id"] = iteration_id
+        if assignee_id:
+            params["assignee_id"] = assignee_id
+        if include_unassigned is not None:
+            params["include_unassigned"] = "true" if include_unassigned else "false"
+        query = urllib.parse.urlencode(params)
+        suffix = "tasks/next"
+        if query:
+            suffix = f"{suffix}?{query}"
+        url = self._project_path(suffix)
+        return self._request("GET", url)
+
+    def decompose_task(self, task_id: str, subtasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        url = self._project_path(f"tasks/{task_id}/decompose")
+        return self._request("POST", url, {"subtasks": subtasks})
+
+    def compose_task(
+        self,
+        task_id: str,
+        result: Optional[str] = None,
+        summary: Optional[str] = None,
+        work_outcomes: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        url = self._project_path(f"tasks/{task_id}/compose")
+        body: Dict[str, Any] = {}
+        if result is not None:
+            body["result"] = result
+        if summary is not None:
+            body["summary"] = summary
+        if work_outcomes is not None:
+            body["work_outcomes"] = work_outcomes
+        return self._request("POST", url, body)
+
     def append_work_outcomes(self, task_id: str, path: str, value: Any) -> Dict[str, Any]:
         url = self._project_path(f"tasks/{task_id}/work-outcomes/append")
         return self._request("POST", url, {"path": path, "value": value})

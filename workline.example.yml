@@ -95,6 +95,7 @@ rbac:
         - task.create
         - task.list
         - task.read
+        - task.next
         - task.tree
         - task.validation.read
         - task.update
@@ -119,6 +120,7 @@ rbac:
         - project.events.read
         - task.list
         - task.read
+        - task.next
         - task.tree
         - task.validation.read
         - iteration.list

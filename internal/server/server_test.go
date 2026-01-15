@@ -390,6 +390,7 @@ func TestPermissionGates(t *testing.T) {
 		{"project status", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/status", nil, "project.status.read"},
 		{"project events", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/events", nil, "project.events.read"},
 		{"task list", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks", nil, "task.list"},
+		{"task next", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks/next", nil, "task.next"},
 		{"task read", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks/" + createdTask.ID, nil, "task.read"},
 		{"task tree", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks/tree", nil, "task.tree"},
 		{"task validation", http.MethodGet, srv.URL + "/v0/projects/" + projectID + "/tasks/" + createdTask.ID + "/validation", nil, "task.validation.read"},

@@ -702,7 +702,7 @@ func (r Repo) ListAttestations(ctx context.Context, f AttestationFilters) ([]dom
 	if len(clauses) > 0 {
 		where = "WHERE " + strings.Join(clauses, " AND ")
 	}
-query := `SELECT id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json FROM attestations ` + where + ` ORDER BY ts DESC, id DESC`
+	query := `SELECT id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json FROM attestations ` + where + ` ORDER BY ts DESC, id DESC`
 	if f.Limit > 0 {
 		query += " LIMIT ?"
 		args = append(args, f.Limit)
@@ -746,9 +746,9 @@ func (r Repo) CountTasksByStatus(ctx context.Context, projectID string) (map[str
 }
 
 func (r Repo) LatestRunningIteration(ctx context.Context, projectID string) (*domain.Iteration, error) {
-row := r.DB.QueryRowContext(ctx, `SELECT id,project_id,goal,status,created_at FROM iterations WHERE project_id=? AND status='running' ORDER BY created_at DESC LIMIT 1`, projectID)
+	row := r.DB.QueryRowContext(ctx, `SELECT id,project_id,goal,status,created_at FROM iterations WHERE project_id=? AND status='running' ORDER BY created_at DESC LIMIT 1`, projectID)
 	var it domain.Iteration
-err := row.Scan(&it.ID, &it.ProjectID, &it.Goal, &it.Status, &it.CreatedAt)
+	err := row.Scan(&it.ID, &it.ProjectID, &it.Goal, &it.Status, &it.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -786,7 +786,7 @@ func (r Repo) LatestEventsFrom(ctx context.Context, limit int, cursor int64, pro
 		args = append(args, cursor)
 	}
 	where := "WHERE " + strings.Join(clauses, " AND ")
-query := fmt.Sprintf(`SELECT id,ts,type,project_id,entity_kind,entity_id,actor_id,payload_json FROM events %s ORDER BY id DESC LIMIT ?`, where)
+	query := fmt.Sprintf(`SELECT id,ts,type,project_id,entity_kind,entity_id,actor_id,payload_json FROM events %s ORDER BY id DESC LIMIT ?`, where)
 	args = append(args, limit)
 	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -806,6 +806,54 @@ query := fmt.Sprintf(`SELECT id,ts,type,project_id,entity_kind,entity_id,actor_i
 		res = append(res, e)
 	}
 	return res, nil
+}
+
+// EventsAfter returns events with IDs greater than the cursor in ascending order.
+func (r Repo) EventsAfter(ctx context.Context, limit int, cursor int64, projectID string) ([]domain.Event, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	clauses := []string{"1=1"}
+	var args []any
+	if projectID != "" {
+		clauses = append(clauses, "project_id=?")
+		args = append(args, projectID)
+	}
+	if cursor > 0 {
+		clauses = append(clauses, "id>?")
+		args = append(args, cursor)
+	}
+	where := "WHERE " + strings.Join(clauses, " AND ")
+	query := fmt.Sprintf(`SELECT id,ts,type,project_id,entity_kind,entity_id,actor_id,payload_json FROM events %s ORDER BY id ASC LIMIT ?`, where)
+	args = append(args, limit)
+	rows, err := r.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []domain.Event
+	for rows.Next() {
+		var e domain.Event
+		var payload sql.NullString
+		if err := rows.Scan(&e.ID, &e.TS, &e.Type, &e.ProjectID, &e.EntityKind, &e.EntityID, &e.ActorID, &payload); err != nil {
+			return nil, err
+		}
+		if payload.Valid {
+			e.Payload = payload.String
+		}
+		res = append(res, e)
+	}
+	return res, nil
+}
+
+// LatestEventID returns the most recent event ID for a project.
+func (r Repo) LatestEventID(ctx context.Context, projectID string) (int64, error) {
+	row := r.DB.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM events WHERE project_id=?`, projectID)
+	var id int64
+	if err := row.Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func nullableIntPtr(v *int) any {

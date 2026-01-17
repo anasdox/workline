@@ -60,3 +60,44 @@ func (r Repo) GetAPIKeyByHash(ctx context.Context, hash string) (domain.APIKey, 
 	}
 	return key, nil
 }
+
+// ListAPIKeys returns API keys, optionally filtered by actor ID.
+func (r Repo) ListAPIKeys(ctx context.Context, actorID string) ([]domain.APIKey, error) {
+	query := `SELECT id, actor_id, COALESCE(name,''), key_hash, created_at FROM api_keys`
+	var args []any
+	if actorID != "" {
+		query += ` WHERE actor_id=?`
+		args = append(args, actorID)
+	}
+	query += ` ORDER BY created_at DESC`
+	rows, err := r.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []domain.APIKey
+	for rows.Next() {
+		var key domain.APIKey
+		var name string
+		if err := rows.Scan(&key.ID, &key.ActorID, &name, &key.KeyHash, &key.CreatedAt); err != nil {
+			return nil, err
+		}
+		if name != "" {
+			key.Name = name
+		}
+		keys = append(keys, key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
+// DeleteAPIKey deletes an API key by ID.
+func (r Repo) DeleteAPIKey(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("id required")
+	}
+	_, err := r.DB.ExecContext(ctx, `DELETE FROM api_keys WHERE id=?`, id)
+	return err
+}

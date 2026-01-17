@@ -17,7 +17,7 @@ Core Concepts (explained simply)
 - Policy(`policies`): rules that say which attestation is needed. Think: "before dessert you must finish veggies." Example: preset `high` might require `ci.passed`, `review.approved`, and `security.ok`.
 - Definition of Ready (DoR): proof that a task is ready to start (e.g., `requirements.accepted`, `design.reviewed`, `scope.groomed`). Use the `ready` preset to gate work.
 - Definition of Done (DoD): proof that a task is really done (e.g., `ci.passed`, `review.approved`, `acceptance.passed`). Task types map to DoD presets by default.
-- Tasks: the pieces of work (feature, bug, docs, workshop). They can depend on others or have children. Status path is `planned -> in_progress -> review -> done` (with `rejected`/`canceled` side exits). Example: `wl task create --type feature --title "Login"` makes a new task; `wl task done <id> --work-outcomes-json '{}'` tries to finish it after checks.
+- Tasks: the pieces of work (feature, bug, docs, workshop, plan). They can depend on others or have children. Status path is `planned -> in_progress -> review -> done` (with `rejected`/`canceled` side exits). Example: `wl task create --type feature --title "Login"` makes a new task; `wl task done <id> --work-outcomes-json '{}'` tries to finish it after checks.
 - Iterations: short adventures inside the big game. Start `pending`, go `running`, then `delivered`, and finally `validated` when the right proof is present. Example: `wl iteration set-status iter-1 --status validated` requires the configured attestation unless `--force`.
 - Leases: a temporary "I’m working on this" tag so two kids don’t do the same task. Example: `wl task claim <id>` to grab, `wl task release <id>` to drop it.
 - Event log: the diary of everything that happened. Example: `wl log tail --n 20` shows recent entries.
@@ -80,6 +80,29 @@ Common Commands
   - Add: `wl attest add --entity-kind iteration --entity-id iter-1 --kind iteration.approved`
   - List: `wl attest list --entity-kind task --entity-id <id>`
 - Logs: `wl log tail --n 50`
+
+Automation + Roles (Agents)
+---------------------------
+- Roles in `workline.example.yml` include `planner`, `executor`, and `reviewer` for multi-agent setups.
+- Bootstrap actors with roles (dev-only, bypasses RBAC checks):
+  ```sh
+  wl rbac bootstrap --project myproj --actor planner-agent --role planner
+  wl rbac bootstrap --project myproj --actor executor-agent --role executor
+  wl rbac bootstrap --project myproj --actor reviewer-agent --role reviewer
+  ```
+- Create API keys for automation (one per actor):
+  ```sh
+  wl api-key create --actor planner-agent --name planner
+  wl api-key create --actor executor-agent --name executor
+  wl api-key create --actor reviewer-agent --name reviewer
+  ```
+- Use the keys with `X-Api-Key` and set env vars for SDKs/examples:
+  ```sh
+  export WORKLINE_PLANNER_API_KEY=...
+  export WORKLINE_EXECUTOR_API_KEY=...
+  export WORKLINE_REVIEWER_API_KEY=...
+  ```
+- Inspect/revoke keys: `wl api-key list` and `wl api-key revoke --id <id>`.
 
 HTTP API
 --------
@@ -155,6 +178,12 @@ Events and Policies
 -------------------
 - All state changes append to `events` (SQLite). Policy-related events include `task.policy.applied`, `task.policy.updated`, `policy.override`, and `iteration.validation.checked`.
 - Validation decisions use the policy fields persisted on each task; presets from config populate these fields on create or when `--set-policy` is used.
+
+Webhooks
+--------
+- Workline can emit webhooks for new events. Configure in `workline.example.yml` and import into the DB.
+- Each webhook entry supports `url`, `events` (optional allowlist), `secret`, `enabled`, and `timeout_seconds`.
+- Delivery is best-effort: in-memory cursor, one event per POST. Non-2xx responses are retried on the next poll.
 
 Testing
 -------

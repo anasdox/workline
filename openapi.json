@@ -432,7 +432,8 @@
               "bug",
               "docs",
               "chore",
-              "workshop"
+              "workshop",
+              "plan"
             ],
             "examples": [
               "feature"
@@ -1033,7 +1034,8 @@
               "bug",
               "docs",
               "chore",
-              "workshop"
+              "workshop",
+              "plan"
             ],
             "examples": [
               "feature"
@@ -1245,7 +1247,8 @@
               "bug",
               "docs",
               "chore",
-              "workshop"
+              "workshop",
+              "plan"
             ],
             "examples": [
               "feature"

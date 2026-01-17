@@ -10,7 +10,13 @@ Optional env vars:
   - WORKLINE_BASE_URL (default: http://127.0.0.1:8080)
   - WORKLINE_PROJECT_ID (default: myproj)
   - WORKLINE_API_KEY (API key for automation)
+  - WORKLINE_PLANNER_API_KEY (API key for planner role)
+  - WORKLINE_EXECUTOR_API_KEY (API key for executor role)
+  - WORKLINE_REVIEWER_API_KEY (API key for reviewer role)
   - WORKLINE_ACCESS_TOKEN (JWT bearer token)
+  - WORKLINE_PLANNER_ACCESS_TOKEN (JWT for planner role)
+  - WORKLINE_EXECUTOR_ACCESS_TOKEN (JWT for executor role)
+  - WORKLINE_REVIEWER_ACCESS_TOKEN (JWT for reviewer role)
   - WORKLINE_HUMAN_REVIEW_MODE (interactive only)
 
 This script:
@@ -63,14 +69,51 @@ API_KEY = os.getenv("WORKLINE_API_KEY")
 ACCESS_TOKEN = os.getenv("WORKLINE_ACCESS_TOKEN")
 HUMAN_REVIEW_MODE = os.getenv("WORKLINE_HUMAN_REVIEW_MODE", "interactive")
 
-client = WorklineClient(BASE_URL, PROJECT_ID, api_key=API_KEY, access_token=ACCESS_TOKEN)
+PLANNER_API_KEY = os.getenv("WORKLINE_PLANNER_API_KEY")
+EXECUTOR_API_KEY = os.getenv("WORKLINE_EXECUTOR_API_KEY")
+REVIEWER_API_KEY = os.getenv("WORKLINE_REVIEWER_API_KEY")
+PLANNER_ACCESS_TOKEN = os.getenv("WORKLINE_PLANNER_ACCESS_TOKEN")
+EXECUTOR_ACCESS_TOKEN = os.getenv("WORKLINE_EXECUTOR_ACCESS_TOKEN")
+REVIEWER_ACCESS_TOKEN = os.getenv("WORKLINE_REVIEWER_ACCESS_TOKEN")
+
+
+planner_client = WorklineClient(
+    BASE_URL,
+    PROJECT_ID,
+    api_key=PLANNER_API_KEY or API_KEY,
+    access_token=PLANNER_ACCESS_TOKEN or ACCESS_TOKEN,
+)
+executor_client = WorklineClient(
+    BASE_URL,
+    PROJECT_ID,
+    api_key=EXECUTOR_API_KEY or API_KEY,
+    access_token=EXECUTOR_ACCESS_TOKEN or ACCESS_TOKEN,
+)
+reviewer_client = WorklineClient(
+    BASE_URL,
+    PROJECT_ID,
+    api_key=REVIEWER_API_KEY or API_KEY,
+    access_token=REVIEWER_ACCESS_TOKEN or ACCESS_TOKEN,
+)
+client = planner_client
 CURRENT_WORKSHOP_ID: Optional[str] = None
+
+
+def _client_for_attestation(kind: str) -> WorklineClient:
+    normalized = kind.strip().lower()
+    if normalized.startswith("review.") or normalized.startswith("acceptance.") or normalized.startswith("security.") or normalized == "iteration.approved":
+        return reviewer_client
+    if normalized.startswith("ci."):
+        return executor_client
+    if normalized.startswith("workshop."):
+        return planner_client
+    return client
 
 
 @tool
 def add_workline_attestation(entity_kind: str, entity_id: str, kind: str) -> Dict[str, str]:
     """Add an attestation to a Workline entity (task, iteration, etc)."""
-    attestation = client.add_attestation(entity_kind, entity_id, kind)
+    attestation = _client_for_attestation(kind).add_attestation(entity_kind, entity_id, kind)
     return {
         "id": attestation.id,
         "entity_kind": attestation.entity_kind,
@@ -102,7 +145,7 @@ def create_workline_task_full(
         body["description"] = description
     if priority is not None:
         body["priority"] = priority
-    data = client._request("POST", client._project_path("tasks"), body)
+    data = planner_client._request("POST", planner_client._project_path("tasks"), body)
     return {
         "id": data["id"],
         "title": data["title"],
@@ -118,7 +161,7 @@ def create_workline_task_full(
 def create_workline_iteration(iteration_id: str, goal: str) -> Dict[str, str]:
     """Create a Workline iteration."""
     body = {"id": iteration_id, "goal": goal}
-    data = client._request("POST", client._project_path("iterations"), body)
+    data = planner_client._request("POST", planner_client._project_path("iterations"), body)
     return {"id": data["id"], "goal": data["goal"], "status": data["status"]}
 
 
@@ -126,17 +169,17 @@ def create_workline_iteration(iteration_id: str, goal: str) -> Dict[str, str]:
 def set_workline_iteration_status(iteration_id: str, status: str, force: bool = False) -> Dict[str, str]:
     """Update Workline iteration status (pending -> running -> delivered -> validated)."""
     body = {"status": status}
-    url = client._project_path(f"iterations/{iteration_id}/status")
+    url = executor_client._project_path(f"iterations/{iteration_id}/status")
     if force:
         url = f"{url}?force=true"
-    data = client._request("PATCH", url, body)
+    data = executor_client._request("PATCH", url, body)
     return {"id": data["id"], "status": data["status"]}
 
 
 @tool
 def latest_workline_events(limit: int = 5) -> List[Dict[str, str]]:
     """Fetch the latest Workline events for audit/debugging."""
-    events = client.events(limit)
+    events = planner_client.events(limit)
     return [
         {
             "id": str(event.id),
@@ -152,7 +195,7 @@ def latest_workline_events(limit: int = 5) -> List[Dict[str, str]]:
 @tool
 def list_workline_iterations(limit: int = 50) -> List[Dict[str, str]]:
     """List recent iterations."""
-    data = client._request("GET", client._project_path(f"iterations?limit={limit}"))
+    data = planner_client._request("GET", planner_client._project_path(f"iterations?limit={limit}"))
     items = data.get("items", data)
     return [
         {"id": item["id"], "goal": item["goal"], "status": item["status"]}
@@ -170,7 +213,7 @@ def list_workline_tasks(iteration_id: Optional[str] = None, status: Optional[str
         params.append(f"status={status}")
     params.append(f"limit={limit}")
     query = "&".join(params)
-    data = client._request("GET", client._project_path(f"tasks?{query}"))
+    data = planner_client._request("GET", planner_client._project_path(f"tasks?{query}"))
     items = data.get("items", data)
     return [
         {
@@ -188,7 +231,7 @@ def list_workline_tasks(iteration_id: Optional[str] = None, status: Optional[str
 def update_workline_task_priority(task_id: str, priority: int) -> Dict[str, object]:
     """Set priority for a Workline task."""
     body = {"priority": priority}
-    data = client._request("PATCH", client._project_path(f"tasks/{task_id}"), body)
+    data = planner_client._request("PATCH", planner_client._project_path(f"tasks/{task_id}"), body)
     return {"id": data["id"], "priority": data.get("priority"), "status": data.get("status")}
 
 
@@ -555,7 +598,7 @@ def run_planner(model: ChatOpenAI, discovery_output: str) -> str:
         "iterations have no duration and we do not do capacity planning here. "
         "Assume the work is carried out by AI actors (e.g., PlannerAgent, "
         "OpsAgent, ReviewerAgent) and assign owners accordingly. Ask questions "
-        "only when decisions are needed "
+        "only when decisions are needed"
         "using ask_human_question, always providing 3-5 options plus 'Other'. "
         "Ask at most one question at a time. "
         "Output sections: Iteration ID, Sprint Goal, "

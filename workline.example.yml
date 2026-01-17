@@ -30,6 +30,8 @@ attestations:
       description: "Decision workshop completed"
     workshop.clarify.completed:
       description: "Clarification workshop completed"
+    planning.approved:
+      description: "Planning approved"
 
 policies:
   presets:
@@ -66,6 +68,9 @@ policies:
     workshop.clarify:
       require: [workshop.clarify.completed]
 
+    planning:
+      require: [planning.approved]
+
   defaults:
     task:
       feature: done.standard
@@ -74,6 +79,7 @@ policies:
       docs: low
       chore: low
       workshop: workshop.problem_refinement
+      plan: planning
 
     iteration:
       validation:
@@ -110,6 +116,51 @@ rbac:
         - attestation.list
         - rbac.manage
         - force.use
+    planner:
+      description: "Plans work and creates backlog"
+      permissions:
+        - project.read
+        - project.config.read
+        - project.status.read
+        - project.events.read
+        - task.create
+        - task.list
+        - task.read
+        - task.next
+        - task.tree
+        - task.validation.read
+        - task.update
+        - iteration.create
+        - iteration.list
+        - decision.create
+        - attestation.list
+    executor:
+      description: "Executes tasks and updates status"
+      permissions:
+        - project.read
+        - project.status.read
+        - project.events.read
+        - task.list
+        - task.read
+        - task.update
+        - task.done
+        - task.claim
+        - task.release
+        - iteration.list
+        - iteration.set_status
+        - attestation.add
+        - attestation.list
+    reviewer:
+      description: "Reviews work and approves gates"
+      permissions:
+        - project.read
+        - project.status.read
+        - project.events.read
+        - task.list
+        - task.read
+        - iteration.list
+        - attestation.add
+        - attestation.list
     observer:
       description: "Read-only observer"
       permissions:
@@ -126,13 +177,26 @@ rbac:
         - iteration.list
         - attestation.list
   attestation_authorities:
-    ci.passed: [owner]
-    review.approved: [owner]
-    acceptance.passed: [owner]
-    security.ok: [owner]
-    iteration.approved: [owner]
-    workshop.discovery.completed: [owner]
-    workshop.problem_refinement.completed: [owner]
-    workshop.eventstorming.completed: [owner]
-    workshop.decision.completed: [owner]
-    workshop.clarify.completed: [owner]
+    ci.passed: [owner, executor]
+    review.approved: [owner, reviewer]
+    acceptance.passed: [owner, reviewer]
+    security.ok: [owner, reviewer]
+    iteration.approved: [owner, reviewer]
+    workshop.discovery.completed: [owner, planner]
+    workshop.problem_refinement.completed: [owner, planner]
+    workshop.eventstorming.completed: [owner, planner]
+    workshop.decision.completed: [owner, planner]
+    workshop.clarify.completed: [owner, planner]
+    planning.approved: [owner, reviewer]
+
+webhooks:
+  - url: "http://127.0.0.1:9000/workline"
+    enabled: false
+    events:
+      - task.created
+      - task.updated
+      - task.done
+      - attestation.added
+      - iteration.updated
+    secret: "change-me"
+    timeout_seconds: 5

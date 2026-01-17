@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -35,6 +36,7 @@ type Config struct {
 		Roles                  map[string]RBACRole `yaml:"roles"`
 		AttestationAuthorities map[string][]string `yaml:"attestation_authorities"`
 	} `yaml:"rbac"`
+	Webhooks []WebhookConfig `yaml:"webhooks"`
 }
 
 type PolicyPreset struct {
@@ -44,6 +46,14 @@ type PolicyPreset struct {
 type RBACRole struct {
 	Description string   `yaml:"description"`
 	Permissions []string `yaml:"permissions"`
+}
+
+type WebhookConfig struct {
+	URL            string   `yaml:"url"`
+	Events         []string `yaml:"events"`
+	Secret         string   `yaml:"secret"`
+	Enabled        *bool    `yaml:"enabled"`
+	TimeoutSeconds int      `yaml:"timeout_seconds"`
 }
 
 // Load reads and validates config from workspace.
@@ -126,6 +136,19 @@ func (c *Config) Validate() error {
 				if _, ok := c.RBAC.Roles[roleID]; !ok {
 					return fmt.Errorf("attestation kind %s references unknown role %s", kind, roleID)
 				}
+			}
+		}
+	}
+	for i, hook := range c.Webhooks {
+		if hook.Enabled != nil && !*hook.Enabled {
+			continue
+		}
+		if strings.TrimSpace(hook.URL) == "" {
+			return fmt.Errorf("config.webhooks[%d].url is required", i)
+		}
+		for _, evt := range hook.Events {
+			if strings.TrimSpace(evt) == "" {
+				return fmt.Errorf("config.webhooks[%d] has empty event type", i)
 			}
 		}
 	}
@@ -220,6 +243,8 @@ attestations:
       description: "Decision workshop completed"
     workshop.clarify.completed:
       description: "Clarification workshop completed"
+    planning.approved:
+      description: "Planning approved"
 
 policies:
   presets:
@@ -256,6 +281,9 @@ policies:
     workshop.clarify:
       require: [workshop.clarify.completed]
 
+    planning:
+      require: [planning.approved]
+
   defaults:
     task:
       feature: done.standard
@@ -264,6 +292,7 @@ policies:
       docs: low
       chore: low
       workshop: workshop.problem_refinement
+      plan: planning
 
     iteration:
       validation:

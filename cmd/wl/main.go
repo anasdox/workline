@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -91,6 +94,7 @@ func registerCommands() {
 	rootCmd.AddCommand(logCmd())
 	rootCmd.AddCommand(serveCmd())
 	rootCmd.AddCommand(rbacCmd())
+	rootCmd.AddCommand(apiKeyCmd())
 }
 
 func projectCmd() *cobra.Command {
@@ -923,6 +927,127 @@ func rbacCmd() *cobra.Command {
 	return cmd
 }
 
+func apiKeyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "api-key",
+		Short: "API key management",
+	}
+	cmd.AddCommand(apiKeyCreateCmd())
+	cmd.AddCommand(apiKeyListCmd())
+	cmd.AddCommand(apiKeyRevokeCmd())
+	return cmd
+}
+
+func apiKeyCreateCmd() *cobra.Command {
+	var actorID, name string
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create API key for automation",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(actorID) == "" {
+				return fmt.Errorf("--actor required")
+			}
+			return withRepo(cmd.Context(), func(ctx context.Context, r repo.Repo) error {
+				now := time.Now().UTC().Format(time.RFC3339)
+				keyPlain, err := generateAPIKey()
+				if err != nil {
+					return err
+				}
+				key := domain.APIKey{
+					ID:        uuid.NewString(),
+					ActorID:   actorID,
+					Name:      name,
+					KeyHash:   repo.HashAPIKey(keyPlain),
+					CreatedAt: now,
+				}
+				tx, err := r.DB.BeginTx(ctx, nil)
+				if err != nil {
+					return err
+				}
+				defer tx.Rollback()
+				if err := r.EnsureActor(ctx, tx, actorID, now); err != nil {
+					return err
+				}
+				if err := r.InsertAPIKey(ctx, tx, key); err != nil {
+					return err
+				}
+				if err := tx.Commit(); err != nil {
+					return err
+				}
+				out := struct {
+					ID        string `json:"id"`
+					ActorID   string `json:"actor_id"`
+					Name      string `json:"name,omitempty"`
+					Key       string `json:"key"`
+					CreatedAt string `json:"created_at"`
+				}{
+					ID:        key.ID,
+					ActorID:   key.ActorID,
+					Name:      key.Name,
+					Key:       keyPlain,
+					CreatedAt: key.CreatedAt,
+				}
+				return printJSONOrTable(out)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&actorID, "actor", "", "actor id")
+	cmd.Flags().StringVar(&name, "name", "", "optional key name")
+	return cmd
+}
+
+func apiKeyListCmd() *cobra.Command {
+	var actorID string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List API keys",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withRepo(cmd.Context(), func(ctx context.Context, r repo.Repo) error {
+				keys, err := r.ListAPIKeys(ctx, actorID)
+				if err != nil {
+					return err
+				}
+				type apiKeyListItem struct {
+					ID        string `json:"id"`
+					ActorID   string `json:"actor_id"`
+					Name      string `json:"name,omitempty"`
+					CreatedAt string `json:"created_at"`
+				}
+				out := make([]apiKeyListItem, 0, len(keys))
+				for _, key := range keys {
+					out = append(out, apiKeyListItem{
+						ID:        key.ID,
+						ActorID:   key.ActorID,
+						Name:      key.Name,
+						CreatedAt: key.CreatedAt,
+					})
+				}
+				return printJSONOrTable(out)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&actorID, "actor", "", "filter by actor id")
+	return cmd
+}
+
+func apiKeyRevokeCmd() *cobra.Command {
+	var id string
+	cmd := &cobra.Command{
+		Use:   "revoke",
+		Short: "Revoke API key",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(id) == "" {
+				return fmt.Errorf("--id required")
+			}
+			return withRepo(cmd.Context(), func(ctx context.Context, r repo.Repo) error {
+				return r.DeleteAPIKey(ctx, id)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&id, "id", "", "api key id")
+	return cmd
+}
+
 func rbacWhoamiCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "whoami",
@@ -1204,6 +1329,14 @@ func printJSON(v any) error {
 func toJSONArray(items []string) string {
 	b, _ := json.Marshal(items)
 	return string(b)
+}
+
+func generateAPIKey() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return "wlk_" + base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
 func setEnvValue(path, key, value string) error {

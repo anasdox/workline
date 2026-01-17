@@ -16,6 +16,10 @@ ifneq (,$(wildcard .env))
 include .env
 export $(shell sed -n 's/^\([^#][^=]*\)=.*/\1/p' .env)
 endif
+ifneq (,$(wildcard .env.automation))
+include .env.automation
+export $(shell sed -n 's/^\([^#][^=]*\)=.*/\1/p' .env.automation)
+endif
 
 help:
 	@echo "Available targets:"
@@ -26,6 +30,8 @@ help:
 	@echo "  import-example-config - import workline.example.yml into the DB"
 	@echo "  restore-langchain-project - reset project data for the LangChain example"
 	@echo "  run-langchain-example - mint dev JWT and run LangChain example"
+	@echo "  bootstrap-automation - create planner/executor/reviewer roles + API keys"
+	@echo "  bootstrap-automation-env - write .env.automation for agent API keys"
 
 test:
 	GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) go test ./...
@@ -69,3 +75,10 @@ run-langchain-example:
 	WORKLINE_ACCESS_TOKEN="$$TOKEN" \
 	WORKLINE_PROJECT_ID="$$WORKLINE_PROJECT_ID" \
 	./.venv/bin/python examples/langchain_workline.py
+
+bootstrap-automation:
+	@./scripts/bootstrap-automation.sh
+
+bootstrap-automation-env:
+	@./scripts/bootstrap-automation.sh --env-file .env.automation
+	@echo "Wrote .env.automation (load it or copy into .env)."

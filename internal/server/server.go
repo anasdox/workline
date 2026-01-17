@@ -104,6 +104,7 @@ func New(cfg Config) (http.Handler, error) {
 	registerMe(group, cfg.Engine)
 	registerDevAuth(group, cfg.Engine, cfg.Auth)
 	registerOpenAPI(router, api, basePath)
+	startWebhookDispatcher(cfg.Engine)
 
 	return router, nil
 }
@@ -806,10 +807,10 @@ func registerTasks(api huma.API, e engine.Engine) {
 	})
 
 	huma.Register(api, huma.Operation{
-		OperationID: "decompose-task",
-		Method:      http.MethodPost,
-		Path:        "/projects/{project_id}/tasks/{id}/decompose",
-		Summary:     "Decompose task into subtasks",
+		OperationID:   "decompose-task",
+		Method:        http.MethodPost,
+		Path:          "/projects/{project_id}/tasks/{id}/decompose",
+		Summary:       "Decompose task into subtasks",
 		DefaultStatus: http.StatusCreated,
 		Errors: []int{
 			http.StatusBadRequest,

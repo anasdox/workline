@@ -27,7 +27,7 @@ type CreateTaskRequest struct {
 	ID           *string                `json:"id,omitempty" example:"task-auth-1"`
 	IterationID  *string                `json:"iteration_id,omitempty" example:"iter-1"`
 	ParentID     *string                `json:"parent_id,omitempty" example:"task-epic"`
-	Type         string                 `json:"type" enum:"technical,feature,bug,docs,chore,workshop" example:"feature"`
+	Type         string                 `json:"type" enum:"technical,feature,bug,docs,chore,workshop,plan" example:"feature"`
 	Title        string                 `json:"title" example:"Ship authentication"`
 	Description  *string                `json:"description,omitempty" example:"Implement login and SSO flows"`
 	AssigneeID   *string                `json:"assignee_id,omitempty" example:"dev-1"`
@@ -42,7 +42,7 @@ type SubtaskRequest struct {
 	ID           *string                `json:"id,omitempty" example:"task-auth-1-1"`
 	LocalID      *string                `json:"local_id,omitempty" example:"auth-ui"`
 	IterationID  *string                `json:"iteration_id,omitempty" example:"iter-1"`
-	Type         string                 `json:"type,omitempty" enum:"technical,feature,bug,docs,chore,workshop" example:"feature"`
+	Type         string                 `json:"type,omitempty" enum:"technical,feature,bug,docs,chore,workshop,plan" example:"feature"`
 	Title        string                 `json:"title" example:"Ship authentication UI"`
 	Description  *string                `json:"description,omitempty" example:"Build login screens and flows"`
 	AssigneeID   *string                `json:"assignee_id,omitempty" example:"dev-1"`
@@ -58,9 +58,9 @@ type DecomposeTaskRequest struct {
 }
 
 type DecomposeTaskResponse struct {
-	Parent   TaskResponse       `json:"parent"`
-	Subtasks []TaskResponse     `json:"subtasks"`
-	Mapping  map[string]string  `json:"mapping,omitempty"`
+	Parent   TaskResponse      `json:"parent"`
+	Subtasks []TaskResponse    `json:"subtasks"`
+	Mapping  map[string]string `json:"mapping,omitempty"`
 }
 
 type ComposeTaskRequest struct {
@@ -155,7 +155,7 @@ type TaskResponse struct {
 	ProjectID            string         `json:"project_id" example:"workline"`
 	IterationID          *string        `json:"iteration_id,omitempty" example:"iter-1"`
 	ParentID             *string        `json:"parent_id,omitempty" example:"task-epic"`
-	Type                 string         `json:"type" enum:"technical,feature,bug,docs,chore,workshop" example:"feature"`
+	Type                 string         `json:"type" enum:"technical,feature,bug,docs,chore,workshop,plan" example:"feature"`
 	Title                string         `json:"title" example:"Ship authentication"`
 	Description          string         `json:"description,omitempty" example:"Implement login and SSO flows"`
 	Status               string         `json:"status" enum:"planned,in_progress,review,done,rejected,canceled" example:"planned"`

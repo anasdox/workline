@@ -2,6 +2,15 @@ project:
   id: example
   kind: software-project
 
+task_types:
+  - technical
+  - feature
+  - bug
+  - docs
+  - chore
+  - workshop
+  - plan
+
 attestations:
   catalog:
     requirements.accepted:

@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS tasks(
   project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
   iteration_id TEXT REFERENCES iterations(id) ON DELETE SET NULL,
   parent_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-  type TEXT CHECK(type IN ('technical','feature','bug','docs','chore','workshop','plan')) NOT NULL,
+  type TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
   status TEXT CHECK(status IN ('planned','in_progress','review','done','rejected','canceled')) NOT NULL,

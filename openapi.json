@@ -426,15 +426,6 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "technical",
-              "feature",
-              "bug",
-              "docs",
-              "chore",
-              "workshop",
-              "plan"
-            ],
             "examples": [
               "feature"
             ],
@@ -1028,15 +1019,6 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "technical",
-              "feature",
-              "bug",
-              "docs",
-              "chore",
-              "workshop",
-              "plan"
-            ],
             "examples": [
               "feature"
             ],
@@ -1241,15 +1223,6 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "technical",
-              "feature",
-              "bug",
-              "docs",
-              "chore",
-              "workshop",
-              "plan"
-            ],
             "examples": [
               "feature"
             ],

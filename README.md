@@ -44,6 +44,7 @@ Configuration
 - Project selection: `--project` overrides; otherwise `WORKLINE_DEFAULT_PROJECT` is required (set via `wl project use <id>`). Config seeding happens only when the project has no stored config.
 - Optional RBAC config: define `rbac.roles` with permission lists and `rbac.attestation_authorities` to control which roles can attest to which kinds.
 - Default policies are applied automatically on task creation based on `policies.defaults.task.<type>` unless overridden with `--policy` or explicit required attestations (`--require`), which emit `policy.override`.
+- Task types are defined in `task_types`. Every task type must map to a preset in `policies.defaults.task`.
 - Iteration validation uses `policies.defaults.iteration.validation.require`; missing value means no attestation is required.
 
 Quick Start

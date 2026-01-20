@@ -116,6 +116,12 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 	if opts.Type == "" {
 		opts.Type = "technical"
 	}
+	if e.Config != nil {
+		allowed := e.Config.AllowedTaskTypes()
+		if !allowed[opts.Type] {
+			return domain.Task{}, fmt.Errorf("unknown task type %s", opts.Type)
+		}
+	}
 	if opts.Title == "" {
 		return domain.Task{}, errors.New("title is required")
 	}

@@ -22,7 +22,7 @@ type Task struct {
 	ProjectID                string   `json:"project_id"`
 	IterationID              *string  `json:"iteration_id,omitempty"`
 	ParentID                 *string  `json:"parent_id,omitempty"`
-	Type                     string   `json:"type" enum:"technical,feature,bug,docs,chore,workshop,plan"`
+	Type                     string   `json:"type"`
 	Title                    string   `json:"title"`
 	Description              string   `json:"description,omitempty"`
 	Status                   string   `json:"status" enum:"planned,in_progress,review,done,rejected,canceled"`

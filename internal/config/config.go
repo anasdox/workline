@@ -32,7 +32,8 @@ type Config struct {
 			} `yaml:"iteration"`
 		} `yaml:"defaults"`
 	} `yaml:"policies"`
-	RBAC struct {
+	TaskTypes []string `yaml:"task_types"`
+	RBAC      struct {
 		Roles                  map[string]RBACRole `yaml:"roles"`
 		AttestationAuthorities map[string][]string `yaml:"attestation_authorities"`
 	} `yaml:"rbac"`
@@ -95,12 +96,21 @@ func (c *Config) Validate() error {
 	if c.Policies.Defaults.Task == nil {
 		return fmt.Errorf("config.policies.defaults.task is required")
 	}
+	allowedTypes := normalizeTaskTypes(c.TaskTypes)
 	for taskType, preset := range c.Policies.Defaults.Task {
 		if preset == "" {
 			return fmt.Errorf("default policy for task type %s is empty", taskType)
 		}
 		if _, ok := c.Policies.Presets[preset]; !ok {
 			return fmt.Errorf("default task preset %s for type %s not defined", preset, taskType)
+		}
+		if !allowedTypes[taskType] {
+			return fmt.Errorf("default policy set for unknown task type %s", taskType)
+		}
+	}
+	for taskType := range allowedTypes {
+		if _, ok := c.Policies.Defaults.Task[taskType]; !ok {
+			return fmt.Errorf("default policy missing for task type %s", taskType)
 		}
 	}
 	requiredKind := c.Policies.Defaults.Iteration.Validation.Require
@@ -153,6 +163,26 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func normalizeTaskTypes(types []string) map[string]bool {
+	if len(types) == 0 {
+		types = []string{"technical", "feature", "bug", "docs", "chore", "workshop", "plan"}
+	}
+	allowed := make(map[string]bool, len(types))
+	for _, taskType := range types {
+		taskType = strings.TrimSpace(taskType)
+		if taskType == "" {
+			continue
+		}
+		allowed[taskType] = true
+	}
+	return allowed
+}
+
+// AllowedTaskTypes returns the task types for this config (defaults when unset).
+func (c *Config) AllowedTaskTypes() map[string]bool {
+	return normalizeTaskTypes(c.TaskTypes)
 }
 
 // Path returns the config file path for a workspace.
@@ -214,6 +244,15 @@ func FromFile(path string) (*Config, error) {
 const defaultTemplate = `project:
   id: %s
   kind: software-project
+
+task_types:
+  - technical
+  - feature
+  - bug
+  - docs
+  - chore
+  - workshop
+  - plan
 
 attestations:
   catalog:

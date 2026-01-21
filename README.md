@@ -36,7 +36,7 @@ Core concepts (pedagogical version)
 
 Task lifecycle
 --------------
-Statuses: `planned -> in_progress -> review -> done` (with exits `rejected`/`canceled`).
+Statuses: `planned -> ready -> in_progress -> review -> done` (with exits `rejected`/`canceled`).
 Quick example:
 ```sh
 wl task create --type feature --title "Login"

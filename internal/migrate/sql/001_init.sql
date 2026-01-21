@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS tasks(
   type TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
-  status TEXT CHECK(status IN ('planned','in_progress','review','done','rejected','canceled')) NOT NULL,
+  status TEXT CHECK(status IN ('planned','ready','in_progress','review','done','rejected','canceled')) NOT NULL,
   assignee_id TEXT,
   priority INTEGER,
   work_outcomes_json TEXT,

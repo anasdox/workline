@@ -74,7 +74,7 @@ type UpdateTaskValidationRequest struct {
 }
 
 type UpdateTaskRequest struct {
-	Status          *string                      `json:"status,omitempty" enum:"planned,in_progress,review,done,rejected,canceled"`
+	Status          *string                      `json:"status,omitempty" enum:"planned,ready,in_progress,review,done,rejected,canceled"`
 	AssigneeID      *string                      `json:"assignee_id,omitempty"`
 	AddDependsOn    []string                     `json:"add_depends_on,omitempty"`
 	RemoveDependsOn []string                     `json:"remove_depends_on,omitempty"`
@@ -158,7 +158,7 @@ type TaskResponse struct {
 	Type                 string         `json:"type" example:"feature"`
 	Title                string         `json:"title" example:"Ship authentication"`
 	Description          string         `json:"description,omitempty" example:"Implement login and SSO flows"`
-	Status               string         `json:"status" enum:"planned,in_progress,review,done,rejected,canceled" example:"planned"`
+	Status               string         `json:"status" enum:"planned,ready,in_progress,review,done,rejected,canceled" example:"planned"`
 	AssigneeID           *string        `json:"assignee_id,omitempty" example:"dev-1"`
 	Priority             *int           `json:"priority,omitempty" example:"1"`
 	WorkOutcomes         map[string]any `json:"work_outcomes,omitempty" example:"{\"pr\":123}"`

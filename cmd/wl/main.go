@@ -40,7 +40,7 @@ Core concepts (kid-friendly):
 - Policies: presets say what proof a task needs (required attestation kinds); task types map to presets by default.
 - Definition of Ready (DoR): proof stickers that say a task is ready to start (requirements accepted, design reviewed, scope groomed).
 - Definition of Done (DoD): proof stickers that say a task is truly done (tests passed, review approved, acceptance checked); enforced by presets per task type.
-- Tasks: work items with parents/deps/leases; statuses go planned -> in_progress -> review -> done (rejected/canceled are exits).
+- Tasks: work items with parents/deps/leases; statuses go planned -> ready -> in_progress -> review -> done (rejected/canceled are exits).
 - Iterations: smaller adventures that move pending -> running -> delivered -> validated/rejected; validation can require a catalog attestation.
 - Attestations: proof stickers like ci.passed or review.approved that satisfy policies.
 - Leases: temporary "I’m working on this" tags (wl task claim/release).
@@ -367,7 +367,7 @@ func taskCmd() *cobra.Command {
 	task := &cobra.Command{
 		Use:   "task",
 		Short: "Manage tasks",
-		Long:  "Tasks are the work items (features, bugs, docs). They flow planned -> in_progress -> review -> done, can depend on each other, and may need proof stickers per policy. Leases prevent two people doing the same task at once.",
+		Long:  "Tasks are the work items (features, bugs, docs). They flow planned -> ready -> in_progress -> review -> done, can depend on each other, and may need proof stickers per policy. Leases prevent two people doing the same task at once.",
 	}
 	task.AddCommand(taskCreateCmd())
 	task.AddCommand(taskListCmd())

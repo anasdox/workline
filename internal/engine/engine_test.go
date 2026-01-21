@@ -51,6 +51,10 @@ func TestTaskStatusTransitions(t *testing.T) {
 		t.Fatalf("create task: %v", err)
 	}
 	// valid path
+	task, err = env.Engine.UpdateTask(env.Ctx, engine.TaskUpdateOptions{ID: task.ID, Status: "ready", ActorID: "tester", Force: true})
+	if err != nil || task.Status != "ready" {
+		t.Fatalf("to ready: %v", err)
+	}
 	task, err = env.Engine.UpdateTask(env.Ctx, engine.TaskUpdateOptions{ID: task.ID, Status: "in_progress", ActorID: "tester", Force: true})
 	if err != nil || task.Status != "in_progress" {
 		t.Fatalf("to in_progress: %v", err)

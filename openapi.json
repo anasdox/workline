@@ -1205,6 +1205,7 @@
           "status": {
             "enum": [
               "planned",
+              "ready",
               "in_progress",
               "review",
               "done",
@@ -1354,6 +1355,7 @@
           "status": {
             "enum": [
               "planned",
+              "ready",
               "in_progress",
               "review",
               "done",

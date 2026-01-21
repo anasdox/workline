@@ -458,8 +458,8 @@ func (r Repo) NextTask(ctx context.Context, f NextTaskFilters) (domain.Task, err
 	if f.ProjectID == "" || f.IterationID == "" {
 		return t, ErrNotFound
 	}
-	clauses := []string{"project_id=?", "iteration_id=?", "status=?"}
-	args := []any{f.ProjectID, f.IterationID, "planned"}
+	clauses := []string{"project_id=?", "iteration_id=?", "status IN (?,?)"}
+	args := []any{f.ProjectID, f.IterationID, "ready", "planned"}
 	if f.AssigneeID != "" {
 		if f.IncludeUnassigned {
 			clauses = append(clauses, "(assignee_id=? OR assignee_id IS NULL)")
@@ -478,6 +478,7 @@ func (r Repo) NextTask(ctx context.Context, f NextTaskFilters) (domain.Task, err
 	)`)
 	where := "WHERE " + strings.Join(clauses, " AND ")
 	order := `ORDER BY
+		CASE WHEN status = 'ready' THEN 0 ELSE 1 END,
 		CASE WHEN assignee_id = ? THEN 0 ELSE 1 END,
 		CASE WHEN priority IS NULL THEN 1 ELSE 0 END,
 		priority ASC,
@@ -485,6 +486,7 @@ func (r Repo) NextTask(ctx context.Context, f NextTaskFilters) (domain.Task, err
 		id ASC`
 	if f.AssigneeID == "" {
 		order = `ORDER BY
+			CASE WHEN status = 'ready' THEN 0 ELSE 1 END,
 			CASE WHEN priority IS NULL THEN 1 ELSE 0 END,
 			priority ASC,
 			created_at ASC,

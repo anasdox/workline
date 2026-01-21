@@ -526,6 +526,10 @@ func ensureTaskTransition(oldStatus, newStatus string, force bool) error {
 	}
 	switch oldStatus {
 	case "planned":
+		if newStatus == "ready" || newStatus == "in_progress" || newStatus == "canceled" || newStatus == "review" || newStatus == "done" {
+			return nil
+		}
+	case "ready":
 		if newStatus == "in_progress" || newStatus == "canceled" || newStatus == "review" || newStatus == "done" {
 			return nil
 		}

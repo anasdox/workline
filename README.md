@@ -6,6 +6,7 @@ Why Workline?
 AI agents that manage projects through text alone easily lose structure and context; Workline gives them a typed API for tasks, iterations, attestations, and policies so they can read/write state safely instead of scraping checklists.
 Too often, “done” is just a checkbox: tasks get marked complete without proof, policies are tribal knowledge, and quality gates are easy to forget. Workline makes “done” and “ready” explicit by attaching attestations (proof) and enforcing policies automatically. It keeps evidence, rules, and history in one place so teams—and agents—ship with confidence instead of guesswork.
 
+1 humain + 1 IA = equipe. Donc projet, donc management, donc gouvernance, donc tracabilite, donc qualite, donc maintenabilite. Workline couvre ce besoin: backlog partage, livrables clairs, workflow, validations, memoire, protocoles.
 
 Workline stores all state in SQLite at `.workline/workline.db`. Project configs (attestations + policies) live in the DB; `workline.example.yml` shows a sample config you can import.
 
@@ -14,9 +15,9 @@ Core Concepts (explained simply)
 
 - Project: the one big game you are playing in this workspace. Everything—iterations, tasks, evidence—belongs to this project.
 - Attestations: proof stickers you attach to tasks or iterations (kinds live in the catalog). Example: after tests pass, add `wl attest add --entity-kind task --entity-id <id> --kind ci.passed`.
-- Policy(`policies`): rules that say which attestation is needed. Think: "before dessert you must finish veggies." Example: preset `high` might require `ci.passed`, `review.approved`, and `security.ok`.
-- Definition of Ready (DoR): proof that a task is ready to start (e.g., `requirements.accepted`, `design.reviewed`, `scope.groomed`). Use the `ready` preset to gate work.
-- Definition of Done (DoD): proof that a task is really done (e.g., `ci.passed`, `review.approved`, `acceptance.passed`). Task types map to DoD presets by default.
+- Policies: rules that say which attestation is needed for a given task type and gate. Think: "before dessert you must finish veggies." Example: `project.task_types.feature.policies.done` might require `ci.passed`, `review.approved`, and `acceptance.passed`.
+- Definition of Ready (DoR): proof that a task is ready to start (e.g., `requirements.accepted`, `design.reviewed`, `scope.groomed`). Use a `ready` policy gate to block work until ready.
+- Definition of Done (DoD): proof that a task is really done (e.g., `ci.passed`, `review.approved`, `acceptance.passed`). Task types carry their own `done` gate.
 - Tasks: the pieces of work (feature, bug, docs, workshop, plan). They can depend on others or have children. Status path is `planned -> in_progress -> review -> done` (with `rejected`/`canceled` side exits). Example: `wl task create --type feature --title "Login"` makes a new task; `wl task done <id> --work-outcomes-json '{}'` tries to finish it after checks.
 - Iterations: short adventures inside the big game. Start `pending`, go `running`, then `delivered`, and finally `validated` when the right proof is present. Example: `wl iteration set-status iter-1 --status validated` requires the configured attestation unless `--force`.
 - Leases: a temporary "I’m working on this" tag so two kids don’t do the same task. Example: `wl task claim <id>` to grab, `wl task release <id>` to drop it.
@@ -33,8 +34,8 @@ Initialization
 - Nothing to run up front. The database at `.workline/workline.db` is created on demand when you run a command.
 - Initial config is seeded into the DB on first use with:
   - Attestation catalog entries for readiness and done checks: `requirements.accepted`, `design.reviewed`, `scope.groomed`, `ci.passed`, `review.approved`, `acceptance.passed`, `security.ok`, `iteration.approved`.
-  - Policy presets: `ready` (DoR), `done.standard`, `done.bugfix`, plus `low/medium/high`.
-  - Task defaults map to DoD presets (`feature`→`done.standard`, `bug`→`done.bugfix`, etc.), and iteration validation requires `iteration.approved`.
+  - Task policies under `project.task_types.<type>.policies` (e.g., `ready`, `done`), and iteration validation under `project.iteration_types.standard.policies.validation`.
+  - RBAC permissions and roles with `grants` and `can_attest`.
 
 Configuration
 -------------
@@ -42,10 +43,10 @@ Configuration
 - You can import overrides from a YAML file: `wl project config import --file workline.example.yml` (or any file you choose).
 - Inspect/validate: `wl config show` and `wl config validate` (or `--json`).
 - Project selection: `--project` overrides; otherwise `WORKLINE_DEFAULT_PROJECT` is required (set via `wl project use <id>`). Config seeding happens only when the project has no stored config.
-- Optional RBAC config: define `rbac.roles` with permission lists and `rbac.attestation_authorities` to control which roles can attest to which kinds.
-- Default policies are applied automatically on task creation based on `policies.defaults.task.<type>` unless overridden with `--policy` or explicit required attestations (`--require`), which emit `policy.override`.
-- Task types are defined in `task_types`. Every task type must map to a preset in `policies.defaults.task`.
-- Iteration validation uses `policies.defaults.iteration.validation.require`; missing value means no attestation is required.
+- RBAC config: define `project.rbac.permissions` sets and `project.rbac.roles` with `grants`. Attestation authority lives in `project.rbac.roles.<role>.can_attest`.
+- Policies live under `project.task_types.<type>.policies` and are applied by name via `--policy` (e.g., `done`), or overridden with explicit required attestations (`--require`), which emits `policy.override`.
+- Task types are defined in `project.task_types`.
+- Iteration validation uses `project.iteration_types.<name>.policies.validation`; missing policy means no attestation is required.
 
 Quick Start
 -----------
@@ -72,8 +73,8 @@ Common Commands
 ---------------
 - Status: `wl status`
 - Tasks:
-  - Create with policy preset: `wl task create --type feature --title "..." --policy high`
-  - Update with preset: `wl task update <id> --set-policy medium`
+  - Create with policy: `wl task create --type feature --title "..." --policy done`
+  - Update with policy: `wl task update <id> --set-policy done`
   - Tree view: `wl task tree`
 - Iterations:
   - Set status: `wl iteration set-status <id> --status validated`

@@ -82,7 +82,7 @@ func (d *webhookDispatcher) dispatchWebhook(idx int, hook config.WebhookConfig) 
 	if len(events) == 0 {
 		return
 	}
-	filter := eventFilter(hook.Events)
+	filter := newEventFilter(hook.Events)
 	for _, evt := range events {
 		if !filter.match(evt.Type) {
 			d.setCursor(idx, evt.ID)
@@ -191,7 +191,7 @@ type eventFilter struct {
 	set map[string]struct{}
 }
 
-func eventFilter(events []string) eventFilter {
+func newEventFilter(events []string) eventFilter {
 	if len(events) == 0 {
 		return eventFilter{all: true}
 	}

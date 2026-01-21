@@ -212,18 +212,19 @@ func TestSeedRBACFromConfig(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	cfg := config.Default("proj-1")
-	cfg.RBAC.Roles = map[string]config.RBACRole{
+	cfg.Project.RBAC.Permissions = map[string][]string{
+		"viewer": {"project.read", "task.list"},
+	}
+	cfg.Project.RBAC.Roles = map[string]config.RBACRole{
 		"owner": {
 			Description: "Owner",
-			Permissions: []string{"project.read", "task.list"},
+			Grants:      []string{"viewer"},
+			CanAttest:   []string{"ci.passed"},
 		},
 		"observer": {
 			Description: "Observer",
-			Permissions: []string{"project.read"},
+			Grants:      []string{"viewer"},
 		},
-	}
-	cfg.RBAC.AttestationAuthorities = map[string][]string{
-		"ci.passed": {"owner"},
 	}
 	eng := engine.New(conn, cfg)
 	eng.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }

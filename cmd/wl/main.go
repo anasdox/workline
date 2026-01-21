@@ -1165,11 +1165,21 @@ func rbacBootstrapCmd() *cobra.Command {
 				}
 				defer tx.Rollback()
 				if cfgErr == nil && cfg != nil {
-					if roleDef, ok := cfg.RBAC.Roles[role]; ok {
+					if roleDef, ok := cfg.Project.RBAC.Roles[role]; ok {
 						if err := r.InsertRole(ctx, tx, role, roleDef.Description); err != nil {
 							return err
 						}
-						for _, perm := range roleDef.Permissions {
+						perms := map[string]bool{}
+						for _, grant := range roleDef.Grants {
+							set, ok := cfg.Project.RBAC.Permissions[grant]
+							if !ok {
+								return fmt.Errorf("unknown permission set %s for role %s", grant, role)
+							}
+							for _, perm := range set {
+								perms[perm] = true
+							}
+						}
+						for perm := range perms {
 							if err := r.InsertPermission(ctx, tx, perm, ""); err != nil {
 								return err
 							}

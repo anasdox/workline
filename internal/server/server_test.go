@@ -352,7 +352,7 @@ func TestPermissionGates(t *testing.T) {
 	client := srv.Client()
 
 	createProjectRes, createProjectBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects", map[string]any{
-		"id": "perm-project",
+		"id":     "perm-project",
 		"org_id": "default-org",
 	}, nil)
 	if createProjectRes.StatusCode != http.StatusCreated {
@@ -733,6 +733,15 @@ func TestIterationValidationBlocked(t *testing.T) {
 	if res.StatusCode != http.StatusCreated {
 		t.Fatalf("create iteration: %d %s", res.StatusCode, string(data))
 	}
+	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title":        "Iter task",
+		"type":         "feature",
+		"iteration_id": "iter-1",
+		"priority":     1,
+	}, nil)
+	if taskRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", taskRes.StatusCode, string(taskData))
+	}
 
 	runRes, runBody := doJSON(t, client, http.MethodPatch, srv.URL+"/v0/projects/"+projectID+"/iterations/iter-1/status", map[string]any{
 		"status": "running",
@@ -1107,8 +1116,8 @@ func TestConfigEndpoint(t *testing.T) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("unmarshal config: %v", err)
 	}
-	if len(cfg.Policies.Presets) == 0 || cfg.Policies.Defaults.Task["feature"] == "" {
-		t.Fatalf("config missing presets/defaults: %+v", cfg)
+	if len(cfg.Project.TaskTypes) == 0 || cfg.Project.TaskTypes["feature"].Policies["done"].All == nil {
+		t.Fatalf("config missing task policies: %+v", cfg)
 	}
 }
 

@@ -20,7 +20,7 @@ type TaskValidationRequest struct {
 }
 
 type TaskPolicyRequest struct {
-	Preset string `json:"preset,omitempty" example:"feature.default"`
+	Preset string `json:"preset,omitempty" example:"done"`
 }
 
 type CreateTaskRequest struct {
@@ -224,36 +224,44 @@ type ValidationStatusResponse struct {
 }
 
 type ProjectConfigResponse struct {
-	Project      projectConfigSection     `json:"project"`
-	Attestations attestationConfigSection `json:"attestations"`
-	Policies     policyConfigSection      `json:"policies"`
+	Project projectConfigSection `json:"project"`
 }
 
 type projectConfigSection struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
+	ID             string                                 `json:"id"`
+	TaskTypes      map[string]taskTypeConfigResponse      `json:"task_types"`
+	IterationTypes map[string]iterationTypeConfigResponse `json:"iteration_types,omitempty"`
+	Attestations   []attestationConfigResponse            `json:"attestations"`
+	RBAC           rbacConfigResponse                     `json:"rbac"`
 }
 
-type attestationConfigSection struct {
-	Catalog map[string]struct {
-		Description string `json:"description"`
-	} `json:"catalog"`
+type taskTypeConfigResponse struct {
+	Policies map[string]policyRuleResponse `json:"policies"`
 }
 
-type policyConfigSection struct {
-	Presets  map[string]policyPresetResponse `json:"presets"`
-	Defaults struct {
-		Task      map[string]string `json:"task"`
-		Iteration struct {
-			Validation struct {
-				Require string `json:"require"`
-			} `json:"validation"`
-		} `json:"iteration"`
-	} `json:"defaults"`
+type iterationTypeConfigResponse struct {
+	Policies map[string]policyRuleResponse `json:"policies"`
 }
 
-type policyPresetResponse struct {
-	Require []string `json:"require"`
+type policyRuleResponse struct {
+	All []string `json:"all"`
+}
+
+type attestationConfigResponse struct {
+	ID          string `json:"id"`
+	Category    string `json:"category,omitempty"`
+	Description string `json:"description"`
+}
+
+type rbacConfigResponse struct {
+	Permissions map[string][]string         `json:"permissions"`
+	Roles       map[string]rbacRoleResponse `json:"roles"`
+}
+
+type rbacRoleResponse struct {
+	Description string   `json:"description"`
+	Grants      []string `json:"grants"`
+	CanAttest   []string `json:"can_attest,omitempty"`
 }
 
 type paginatedTasks struct {
@@ -402,30 +410,47 @@ func leaseResponse(l domain.Lease) LeaseResponse {
 func configResponse(cfg *config.Config) ProjectConfigResponse {
 	res := ProjectConfigResponse{
 		Project: projectConfigSection{
-			ID:   cfg.Project.ID,
-			Kind: cfg.Project.Kind,
-		},
-		Attestations: attestationConfigSection{
-			Catalog: map[string]struct {
-				Description string `json:"description"`
-			}{},
-		},
-		Policies: policyConfigSection{
-			Presets: map[string]policyPresetResponse{},
+			ID:             cfg.Project.ID,
+			TaskTypes:      map[string]taskTypeConfigResponse{},
+			IterationTypes: map[string]iterationTypeConfigResponse{},
+			Attestations:   []attestationConfigResponse{},
+			RBAC: rbacConfigResponse{
+				Permissions: map[string][]string{},
+				Roles:       map[string]rbacRoleResponse{},
+			},
 		},
 	}
-	for k, v := range cfg.Attestations.Catalog {
-		res.Attestations.Catalog[k] = struct {
-			Description string `json:"description"`
-		}{Description: v.Description}
+	for name, tt := range cfg.Project.TaskTypes {
+		policies := map[string]policyRuleResponse{}
+		for pname, rule := range tt.Policies {
+			policies[pname] = policyRuleResponse{All: nonNilSlice(rule.All)}
+		}
+		res.Project.TaskTypes[name] = taskTypeConfigResponse{Policies: policies}
 	}
-	for name, preset := range cfg.Policies.Presets {
-		res.Policies.Presets[name] = policyPresetResponse{
-			Require: nonNilSlice(preset.Require),
+	for name, it := range cfg.Project.IterationTypes {
+		policies := map[string]policyRuleResponse{}
+		for pname, rule := range it.Policies {
+			policies[pname] = policyRuleResponse{All: nonNilSlice(rule.All)}
+		}
+		res.Project.IterationTypes[name] = iterationTypeConfigResponse{Policies: policies}
+	}
+	for _, att := range cfg.Project.Attestations {
+		res.Project.Attestations = append(res.Project.Attestations, attestationConfigResponse{
+			ID:          att.ID,
+			Category:    att.Category,
+			Description: att.Description,
+		})
+	}
+	for name, perms := range cfg.Project.RBAC.Permissions {
+		res.Project.RBAC.Permissions[name] = nonNilSlice(perms)
+	}
+	for roleID, role := range cfg.Project.RBAC.Roles {
+		res.Project.RBAC.Roles[roleID] = rbacRoleResponse{
+			Description: role.Description,
+			Grants:      nonNilSlice(role.Grants),
+			CanAttest:   nonNilSlice(role.CanAttest),
 		}
 	}
-	res.Policies.Defaults.Task = cfg.Policies.Defaults.Task
-	res.Policies.Defaults.Iteration.Validation.Require = cfg.Policies.Defaults.Iteration.Validation.Require
 	return res
 }
 

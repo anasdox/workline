@@ -167,25 +167,25 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 		id = uuid.NewSHA1(uuid.NameSpaceOID, []byte(opts.ProjectID+"|"+opts.Title+"|"+now)).String()
 	}
 	var reqJSON *string
-	presetName := opts.PolicyPreset
+	policyName := opts.PolicyPreset
 	manualPolicy := opts.PolicyOverride
 	if !manualPolicy {
-		if presetName == "" {
-			presetName = cfg.Policies.Defaults.Task[opts.Type]
+		if policyName == "" {
+			policyName = cfg.DefaultTaskPolicyName(opts.Type)
 		}
-		if presetName != "" {
-			preset, ok := cfg.Policies.Presets[presetName]
+		if policyName != "" {
+			policy, ok := cfg.TaskPolicy(opts.Type, policyName)
 			if !ok {
-				return domain.Task{}, fmt.Errorf("policy preset %s not found", presetName)
+				return domain.Task{}, fmt.Errorf("policy %s not found for task type %s", policyName, opts.Type)
 			}
-			opts.RequiredKinds = preset.Require
-			reqJSON, err = marshalStringSlice(preset.Require)
+			opts.RequiredKinds = policy.All
+			reqJSON, err = marshalStringSlice(policy.All)
 			if err != nil {
 				return domain.Task{}, err
 			}
 		}
 	}
-	if manualPolicy || presetName == "" {
+	if manualPolicy || policyName == "" {
 		reqJSON, err = marshalStringSlice(opts.RequiredKinds)
 		if err != nil {
 			return domain.Task{}, err
@@ -235,9 +235,9 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 		}); err != nil {
 			return domain.Task{}, err
 		}
-	} else if presetName != "" {
+	} else if policyName != "" {
 		if err := e.Events.Append(ctx, tx, "task.policy.applied", t.ProjectID, "task", t.ID, opts.ActorID, events.EventPayload{
-			"preset_name": presetName,
+			"policy_name": policyName,
 			"require":     opts.RequiredKinds,
 		}); err != nil {
 			return domain.Task{}, err
@@ -422,11 +422,11 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 		}
 	}
 	if opts.PolicyPreset != "" {
-		preset, ok := e.Config.Policies.Presets[opts.PolicyPreset]
+		policy, ok := e.Config.TaskPolicy(t.Type, opts.PolicyPreset)
 		if !ok {
-			return t, fmt.Errorf("policy preset %s not found", opts.PolicyPreset)
+			return t, fmt.Errorf("policy %s not found for task type %s", opts.PolicyPreset, t.Type)
 		}
-		reqJSON, err := marshalStringSlice(preset.Require)
+		reqJSON, err := marshalStringSlice(policy.All)
 		if err != nil {
 			return t, err
 		}
@@ -493,7 +493,7 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 	overrideEvent := opts.PolicyOverride || (opts.RequiredKindsSet && opts.PolicyPreset == "")
 	if opts.PolicyPreset != "" {
 		if err := e.Events.Append(ctx, tx, "task.policy.updated", t.ProjectID, "task", t.ID, opts.ActorID, events.EventPayload{
-			"preset_name": opts.PolicyPreset,
+			"policy_name": opts.PolicyPreset,
 			"old_require": oldPolicy.Require,
 			"new_require": newPolicy.Require,
 		}); err != nil {
@@ -883,18 +883,18 @@ func (e Engine) SetIterationStatus(ctx context.Context, id, status, actorID stri
 			}
 		}
 	}
-	requiredKind := ""
+	var requiredKinds []string
 	if e.Config != nil {
-		requiredKind = e.Config.Policies.Defaults.Iteration.Validation.Require
+		requiredKinds = e.Config.IterationValidationPolicy()
 	}
 	if status == "validated" && !force {
-		if requiredKind != "" {
-			ok, err := e.iterationValidated(ctx, id, requiredKind)
+		if len(requiredKinds) > 0 {
+			ok, err := e.iterationValidated(ctx, id, requiredKinds)
 			if err != nil {
 				return it, err
 			}
 			if !ok {
-				return it, fmt.Errorf("attestation %s required for iteration validation", requiredKind)
+				return it, errors.New("iteration validation policy not satisfied")
 			}
 		}
 	}
@@ -916,16 +916,16 @@ func (e Engine) SetIterationStatus(ctx context.Context, id, status, actorID stri
 	}
 	if status == "validated" {
 		result := true
-		if !force && requiredKind != "" {
-			ok, err := e.iterationValidated(ctx, id, requiredKind)
+		if !force && len(requiredKinds) > 0 {
+			ok, err := e.iterationValidated(ctx, id, requiredKinds)
 			if err != nil {
 				return it, err
 			}
 			result = ok
 		}
 		if err := e.Events.Append(ctx, tx, "iteration.validation.checked", it.ProjectID, "iteration", id, actorID, events.EventPayload{
-			"required_kind": requiredKind,
-			"result":        result,
+			"required_kinds": requiredKinds,
+			"result":         result,
 		}); err != nil {
 			return it, err
 		}
@@ -940,16 +940,22 @@ func (e Engine) SetIterationStatus(ctx context.Context, id, status, actorID stri
 	return it, nil
 }
 
-func (e Engine) iterationValidated(ctx context.Context, iterationID, kind string) (bool, error) {
-	if kind == "" {
+func (e Engine) iterationValidated(ctx context.Context, iterationID string, kinds []string) (bool, error) {
+	if len(kinds) == 0 {
 		return true, nil
 	}
-	rows, err := e.DB.QueryContext(ctx, `SELECT 1 FROM attestations WHERE entity_kind='iteration' AND entity_id=? AND kind=? LIMIT 1`, iterationID, kind)
-	if err != nil {
-		return false, err
+	for _, kind := range kinds {
+		rows, err := e.DB.QueryContext(ctx, `SELECT 1 FROM attestations WHERE entity_kind='iteration' AND entity_id=? AND kind=? LIMIT 1`, iterationID, kind)
+		if err != nil {
+			return false, err
+		}
+		hasRow := rows.Next()
+		rows.Close()
+		if !hasRow {
+			return false, nil
+		}
 	}
-	defer rows.Close()
-	return rows.Next(), nil
+	return true, nil
 }
 
 func (e Engine) CreateDecision(ctx context.Context, d domain.Decision, actorID string) (domain.Decision, error) {
@@ -1194,6 +1200,7 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 		"task.create":          "Create task",
 		"task.list":            "List tasks",
 		"task.read":            "Read task",
+		"task.next":            "Read next task",
 		"task.tree":            "Read task tree",
 		"task.validation.read": "Read task validation",
 		"task.update":          "Update task",
@@ -1233,6 +1240,7 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 		"project.events.read",
 		"task.list",
 		"task.read",
+		"task.next",
 		"task.tree",
 		"task.validation.read",
 		"iteration.list",
@@ -1249,12 +1257,16 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 		"release":  append(append([]string{}, readPerms...), "iteration.set_status", "attestation.add", "force.use"),
 		"observer": append([]string{}, readPerms...),
 	}
-	if cfg != nil && len(cfg.RBAC.Roles) > 0 {
+	if cfg != nil && len(cfg.Project.RBAC.Roles) > 0 {
 		roleDescs = map[string]string{}
 		rolePerms = map[string][]string{}
-		for roleID, role := range cfg.RBAC.Roles {
+		for roleID, role := range cfg.Project.RBAC.Roles {
 			roleDescs[roleID] = role.Description
-			rolePerms[roleID] = append([]string{}, role.Permissions...)
+			var perms []string
+			for _, grant := range role.Grants {
+				perms = append(perms, cfg.Project.RBAC.Permissions[grant]...)
+			}
+			rolePerms[roleID] = uniqueStrings(perms)
 		}
 	}
 	for role, desc := range roleDescs {
@@ -1286,8 +1298,13 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 		"iteration.approved": {"release", "owner"},
 		"init.check":         {"owner"},
 	}
-	if cfg != nil && len(cfg.RBAC.AttestationAuthorities) > 0 {
-		authorities = cfg.RBAC.AttestationAuthorities
+	if cfg != nil && len(cfg.Project.RBAC.Roles) > 0 {
+		authorities = map[string][]string{}
+		for roleID, role := range cfg.Project.RBAC.Roles {
+			for _, kind := range role.CanAttest {
+				authorities[kind] = append(authorities[kind], roleID)
+			}
+		}
 	}
 	for kind, roles := range authorities {
 		for _, role := range roles {
@@ -1318,4 +1335,17 @@ func keys(m map[string]string) []string {
 		res = append(res, k)
 	}
 	return res
+}
+
+func uniqueStrings(in []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
 }

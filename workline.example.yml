@@ -1,211 +1,227 @@
 project:
   id: example
-  kind: software-project
-
-task_types:
-  - technical
-  - feature
-  - bug
-  - docs
-  - chore
-  - workshop
-  - plan
-
-attestations:
-  catalog:
-    requirements.accepted:
+  task_types:
+    feature:
+      policies:
+        ready:
+          all: [requirements.accepted, design.reviewed, scope.groomed]
+        done:
+          all: [ci.passed, review.approved, acceptance.passed]
+    bug:
+      policies:
+        done:
+          all: [ci.passed, review.approved]
+    technical:
+      policies:
+        done:
+          all: [ci.passed, review.approved, acceptance.passed]
+    docs:
+      policies:
+        done:
+          all: [ci.passed, review.approved]
+    chore:
+      policies:
+        done:
+          all: [ci.passed, review.approved]
+    workshop:
+      policies:
+        discovery:
+          all: [workshop.discovery.completed]
+        problem_refinement:
+          all: [workshop.problem_refinement.completed]
+        eventstorming:
+          all: [workshop.eventstorming.completed]
+        decision:
+          all: [workshop.decision.completed]
+        clarify:
+          all: [workshop.clarify.completed]
+    plan:
+      policies:
+        done:
+          all: [planning.approved]
+  iteration_types:
+    standard:
+      policies:
+        validation:
+          all: [iteration.approved]
+  attestations:
+    - id: requirements.accepted
+      category: requirements
       description: "Team agreed on scope and requirements"
-    design.reviewed:
+    - id: design.reviewed
+      category: design
       description: "Solution/design reviewed"
-    scope.groomed:
+    - id: scope.groomed
+      category: planning
       description: "Task is sized, dependencies known"
-    ci.passed:
+    - id: ci.passed
+      category: delivery
       description: "CI pipeline completed successfully"
-    review.approved:
+    - id: review.approved
+      category: delivery
       description: "Code review approved"
-    acceptance.passed:
+    - id: acceptance.passed
+      category: delivery
       description: "Acceptance criteria validated"
-    security.ok:
+    - id: security.ok
+      category: security
       description: "Security checks passed"
-    iteration.approved:
+    - id: iteration.approved
+      category: iteration
       description: "Iteration approved"
-    workshop.discovery.completed:
+    - id: workshop.discovery.completed
+      category: workshop
       description: "Discovery workshop completed"
-    workshop.problem_refinement.completed:
+    - id: workshop.problem_refinement.completed
+      category: workshop
       description: "Problem refinement workshop completed"
-    workshop.eventstorming.completed:
+    - id: workshop.eventstorming.completed
+      category: workshop
       description: "Event storming workshop completed"
-    workshop.decision.completed:
+    - id: workshop.decision.completed
+      category: workshop
       description: "Decision workshop completed"
-    workshop.clarify.completed:
+    - id: workshop.clarify.completed
+      category: workshop
       description: "Clarification workshop completed"
-    planning.approved:
+    - id: planning.approved
+      category: planning
       description: "Planning approved"
-
-policies:
-  presets:
-    ready:
-      require: [requirements.accepted, design.reviewed, scope.groomed]
-
-    done.standard:
-      require: [ci.passed, review.approved, acceptance.passed]
-
-    done.bugfix:
-      require: [ci.passed, review.approved]
-
-    low:
-      require: [ci.passed, review.approved]
-
-    medium:
-      require: [ci.passed, review.approved]
-
-    high:
-      require: [ci.passed, review.approved, security.ok]
-
-    workshop.discovery:
-      require: [workshop.discovery.completed]
-
-    workshop.problem_refinement:
-      require: [workshop.problem_refinement.completed]
-
-    workshop.eventstorming:
-      require: [workshop.eventstorming.completed]
-
-    workshop.decision:
-      require: [workshop.decision.completed]
-
-    workshop.clarify:
-      require: [workshop.clarify.completed]
-
-    planning:
-      require: [planning.approved]
-
-  defaults:
-    task:
-      feature: done.standard
-      bug: done.bugfix
-      technical: done.standard
-      docs: low
-      chore: low
-      workshop: workshop.problem_refinement
-      plan: planning
-
-    iteration:
-      validation:
-        require: iteration.approved
-
-rbac:
-  roles:
-    owner:
-      description: "Project owner"
-      permissions:
-        - project.create
+    - id: init.check
+      category: system
+      description: "Initial project check"
+  rbac:
+    permissions:
+      project.viewer:
         - project.list
         - project.read
+        - project.config.read
+        - project.status.read
+        - project.events.read
+      project.admin:
+        - project.create
         - project.update
         - project.delete
-        - project.config.read
-        - project.status.read
-        - project.events.read
-        - task.create
+      task.viewer:
         - task.list
         - task.read
         - task.next
         - task.tree
         - task.validation.read
+      task.writer:
+        - task.create
         - task.update
-        - task.done
         - task.claim
         - task.release
+      task.executor:
+        - task.done
+      iteration.viewer:
+        - iteration.list
+      iteration.writer:
         - iteration.create
         - iteration.list
         - iteration.set_status
+      decision.writer:
         - decision.create
+      attestation.viewer:
+        - attestation.list
+      attestation.writer:
         - attestation.add
         - attestation.list
+      rbac.admin:
         - rbac.manage
+      force.use:
         - force.use
-    planner:
-      description: "Plans work and creates backlog"
-      permissions:
-        - project.read
-        - project.config.read
-        - project.status.read
-        - project.events.read
-        - task.create
-        - task.list
-        - task.read
-        - task.next
-        - task.tree
-        - task.validation.read
-        - task.update
-        - iteration.create
-        - iteration.list
-        - decision.create
-        - attestation.list
-    executor:
-      description: "Executes tasks and updates status"
-      permissions:
-        - project.read
-        - project.status.read
-        - project.events.read
-        - task.list
-        - task.read
-        - task.update
-        - task.done
-        - task.claim
-        - task.release
-        - iteration.list
-        - iteration.set_status
-        - attestation.add
-        - attestation.list
-    reviewer:
-      description: "Reviews work and approves gates"
-      permissions:
-        - project.read
-        - project.status.read
-        - project.events.read
-        - task.list
-        - task.read
-        - iteration.list
-        - attestation.add
-        - attestation.list
-    observer:
-      description: "Read-only observer"
-      permissions:
-        - project.list
-        - project.read
-        - project.config.read
-        - project.status.read
-        - project.events.read
-        - task.list
-        - task.read
-        - task.next
-        - task.tree
-        - task.validation.read
-        - iteration.list
-        - attestation.list
-  attestation_authorities:
-    ci.passed: [owner, executor]
-    review.approved: [owner, reviewer]
-    acceptance.passed: [owner, reviewer]
-    security.ok: [owner, reviewer]
-    iteration.approved: [owner, reviewer]
-    workshop.discovery.completed: [owner, planner]
-    workshop.problem_refinement.completed: [owner, planner]
-    workshop.eventstorming.completed: [owner, planner]
-    workshop.decision.completed: [owner, planner]
-    workshop.clarify.completed: [owner, planner]
-    planning.approved: [owner, reviewer]
-
-webhooks:
-  - url: "http://127.0.0.1:9000/workline"
-    enabled: false
-    events:
-      - task.created
-      - task.updated
-      - task.done
-      - attestation.added
-      - iteration.updated
-    secret: "change-me"
-    timeout_seconds: 5
+    roles:
+      owner:
+        description: "Project owner"
+        grants:
+          - project.viewer
+          - project.admin
+          - task.viewer
+          - task.writer
+          - task.executor
+          - iteration.viewer
+          - iteration.writer
+          - decision.writer
+          - attestation.writer
+          - rbac.admin
+          - force.use
+        can_attest:
+          - ci.passed
+          - review.approved
+          - acceptance.passed
+          - security.ok
+          - iteration.approved
+          - init.check
+          - workshop.discovery.completed
+          - workshop.problem_refinement.completed
+          - workshop.eventstorming.completed
+          - workshop.decision.completed
+          - workshop.clarify.completed
+          - planning.approved
+      planner:
+        description: "Plans work and creates backlog"
+        grants:
+          - project.viewer
+          - task.viewer
+          - task.writer
+          - iteration.viewer
+          - iteration.writer
+          - decision.writer
+          - attestation.viewer
+        can_attest:
+          - workshop.discovery.completed
+          - workshop.problem_refinement.completed
+          - workshop.eventstorming.completed
+          - workshop.decision.completed
+          - workshop.clarify.completed
+      executor:
+        description: "Executes tasks and updates status"
+        grants:
+          - project.viewer
+          - task.viewer
+          - task.writer
+          - task.executor
+          - iteration.viewer
+          - iteration.writer
+          - attestation.writer
+        can_attest:
+          - ci.passed
+      reviewer:
+        description: "Reviews work and approves gates"
+        grants:
+          - project.viewer
+          - task.viewer
+          - iteration.viewer
+          - attestation.writer
+        can_attest:
+          - review.approved
+          - acceptance.passed
+          - iteration.approved
+          - planning.approved
+      dev:
+        description: "Developer"
+        grants:
+          - project.viewer
+          - task.viewer
+          - task.writer
+          - task.executor
+          - iteration.viewer
+          - attestation.viewer
+      security:
+        description: "Security"
+        grants:
+          - project.viewer
+          - task.viewer
+          - iteration.viewer
+          - attestation.writer
+        can_attest:
+          - security.ok
+      observer:
+        description: "Read-only observer"
+        grants:
+          - project.viewer
+          - task.viewer
+          - iteration.viewer
+          - attestation.viewer

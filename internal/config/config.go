@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -13,40 +14,42 @@ import (
 // Config models workline.yml.
 type Config struct {
 	Project struct {
-		ID   string `yaml:"id"`
-		Kind string `yaml:"kind"`
+		ID             string                       `yaml:"id"`
+		TaskTypes      map[string]TaskTypeConfig    `yaml:"task_types"`
+		IterationTypes map[string]IterationTypeSpec `yaml:"iteration_types"`
+		Attestations   []AttestationConfig          `yaml:"attestations"`
+		RBAC           RBACConfig                   `yaml:"rbac"`
 	} `yaml:"project"`
-	Attestations struct {
-		Catalog map[string]struct {
-			Description string `yaml:"description"`
-		} `yaml:"catalog"`
-	} `yaml:"attestations"`
-	Policies struct {
-		Presets  map[string]PolicyPreset `yaml:"presets"`
-		Defaults struct {
-			Task      map[string]string `yaml:"task"`
-			Iteration struct {
-				Validation struct {
-					Require string `yaml:"require"`
-				} `yaml:"validation"`
-			} `yaml:"iteration"`
-		} `yaml:"defaults"`
-	} `yaml:"policies"`
-	TaskTypes []string `yaml:"task_types"`
-	RBAC      struct {
-		Roles                  map[string]RBACRole `yaml:"roles"`
-		AttestationAuthorities map[string][]string `yaml:"attestation_authorities"`
-	} `yaml:"rbac"`
 	Webhooks []WebhookConfig `yaml:"webhooks"`
 }
 
-type PolicyPreset struct {
-	Require []string `yaml:"require"`
+type TaskTypeConfig struct {
+	Policies map[string]PolicyRule `yaml:"policies"`
+}
+
+type IterationTypeSpec struct {
+	Policies map[string]PolicyRule `yaml:"policies"`
+}
+
+type PolicyRule struct {
+	All []string `yaml:"all"`
+}
+
+type AttestationConfig struct {
+	ID          string `yaml:"id"`
+	Category    string `yaml:"category"`
+	Description string `yaml:"description"`
+}
+
+type RBACConfig struct {
+	Permissions map[string][]string `yaml:"permissions"`
+	Roles       map[string]RBACRole `yaml:"roles"`
 }
 
 type RBACRole struct {
 	Description string   `yaml:"description"`
-	Permissions []string `yaml:"permissions"`
+	Grants      []string `yaml:"grants"`
+	CanAttest   []string `yaml:"can_attest"`
 }
 
 type WebhookConfig struct {
@@ -75,76 +78,88 @@ func (c *Config) Validate() error {
 	if c.Project.ID == "" {
 		return fmt.Errorf("config.project.id is required")
 	}
-	if c.Project.Kind != "software-project" {
-		return fmt.Errorf("config.project.kind must be 'software-project'")
+	if len(c.Project.TaskTypes) == 0 {
+		return fmt.Errorf("config.project.task_types is required")
 	}
-	if c.Policies.Presets == nil {
-		return fmt.Errorf("config.policies.presets is required")
-	}
-	for name, preset := range c.Policies.Presets {
-		for _, req := range preset.Require {
-			if req == "" {
-				return fmt.Errorf("preset %s has empty attestation kind", name)
+	attestationKinds := c.attestationKinds()
+	for id, tt := range c.Project.TaskTypes {
+		if strings.TrimSpace(id) == "" {
+			return fmt.Errorf("config.project.task_types contains empty type id")
+		}
+		if len(tt.Policies) == 0 {
+			return fmt.Errorf("task type %s has no policies", id)
+		}
+		for policyName, rule := range tt.Policies {
+			if strings.TrimSpace(policyName) == "" {
+				return fmt.Errorf("task type %s has empty policy name", id)
 			}
-			if len(c.Attestations.Catalog) > 0 {
-				if _, ok := c.Attestations.Catalog[req]; !ok {
-					return fmt.Errorf("preset %s requires unknown attestation kind %s", name, req)
+			for _, kind := range rule.All {
+				if kind == "" {
+					return fmt.Errorf("task type %s policy %s has empty attestation kind", id, policyName)
+				}
+				if len(attestationKinds) > 0 && !attestationKinds[kind] {
+					return fmt.Errorf("task type %s policy %s requires unknown attestation kind %s", id, policyName, kind)
 				}
 			}
 		}
 	}
-	if c.Policies.Defaults.Task == nil {
-		return fmt.Errorf("config.policies.defaults.task is required")
-	}
-	allowedTypes := normalizeTaskTypes(c.TaskTypes)
-	for taskType, preset := range c.Policies.Defaults.Task {
-		if preset == "" {
-			return fmt.Errorf("default policy for task type %s is empty", taskType)
+	for id, it := range c.Project.IterationTypes {
+		if strings.TrimSpace(id) == "" {
+			return fmt.Errorf("config.project.iteration_types contains empty type id")
 		}
-		if _, ok := c.Policies.Presets[preset]; !ok {
-			return fmt.Errorf("default task preset %s for type %s not defined", preset, taskType)
-		}
-		if !allowedTypes[taskType] {
-			return fmt.Errorf("default policy set for unknown task type %s", taskType)
-		}
-	}
-	for taskType := range allowedTypes {
-		if _, ok := c.Policies.Defaults.Task[taskType]; !ok {
-			return fmt.Errorf("default policy missing for task type %s", taskType)
-		}
-	}
-	requiredKind := c.Policies.Defaults.Iteration.Validation.Require
-	if requiredKind != "" && len(c.Attestations.Catalog) > 0 {
-		if _, ok := c.Attestations.Catalog[requiredKind]; !ok {
-			return fmt.Errorf("iteration validation requires unknown attestation kind %s", requiredKind)
-		}
-	}
-	if len(c.RBAC.Roles) > 0 {
-		if _, ok := c.RBAC.Roles["owner"]; !ok {
-			return fmt.Errorf("config.rbac.roles must include owner")
-		}
-		for roleID, role := range c.RBAC.Roles {
-			if roleID == "" {
-				return fmt.Errorf("config.rbac.roles contains empty role id")
+		for policyName, rule := range it.Policies {
+			if strings.TrimSpace(policyName) == "" {
+				return fmt.Errorf("iteration type %s has empty policy name", id)
 			}
-			for _, perm := range role.Permissions {
-				if perm == "" {
-					return fmt.Errorf("role %s has empty permission id", roleID)
+			for _, kind := range rule.All {
+				if kind == "" {
+					return fmt.Errorf("iteration type %s policy %s has empty attestation kind", id, policyName)
+				}
+				if len(attestationKinds) > 0 && !attestationKinds[kind] {
+					return fmt.Errorf("iteration type %s policy %s requires unknown attestation kind %s", id, policyName, kind)
 				}
 			}
 		}
 	}
-	for kind, roles := range c.RBAC.AttestationAuthorities {
-		if kind == "" {
-			return fmt.Errorf("config.rbac.attestation_authorities has empty kind")
-		}
-		for _, roleID := range roles {
-			if roleID == "" {
-				return fmt.Errorf("attestation kind %s has empty role id", kind)
+	if len(c.Project.Attestations) > 0 {
+		seen := map[string]bool{}
+		for _, att := range c.Project.Attestations {
+			if strings.TrimSpace(att.ID) == "" {
+				return fmt.Errorf("config.project.attestations contains empty id")
 			}
-			if len(c.RBAC.Roles) > 0 {
-				if _, ok := c.RBAC.Roles[roleID]; !ok {
-					return fmt.Errorf("attestation kind %s references unknown role %s", kind, roleID)
+			if seen[att.ID] {
+				return fmt.Errorf("duplicate attestation id %s", att.ID)
+			}
+			seen[att.ID] = true
+		}
+	}
+	if len(c.Project.RBAC.Roles) > 0 {
+		if len(c.Project.RBAC.Permissions) == 0 {
+			return fmt.Errorf("config.project.rbac.permissions is required when roles are defined")
+		}
+		if _, ok := c.Project.RBAC.Roles["owner"]; !ok {
+			return fmt.Errorf("config.project.rbac.roles must include owner")
+		}
+		for roleID, role := range c.Project.RBAC.Roles {
+			if roleID == "" {
+				return fmt.Errorf("config.project.rbac.roles contains empty role id")
+			}
+			for _, grant := range role.Grants {
+				if grant == "" {
+					return fmt.Errorf("role %s has empty grant id", roleID)
+				}
+				if len(c.Project.RBAC.Permissions) > 0 {
+					if _, ok := c.Project.RBAC.Permissions[grant]; !ok {
+						return fmt.Errorf("role %s references unknown permission set %s", roleID, grant)
+					}
+				}
+			}
+			for _, kind := range role.CanAttest {
+				if kind == "" {
+					return fmt.Errorf("role %s has empty attestation kind", roleID)
+				}
+				if len(attestationKinds) > 0 && !attestationKinds[kind] {
+					return fmt.Errorf("role %s references unknown attestation kind %s", roleID, kind)
 				}
 			}
 		}
@@ -165,16 +180,22 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func normalizeTaskTypes(types []string) map[string]bool {
-	if len(types) == 0 {
-		types = []string{"technical", "feature", "bug", "docs", "chore", "workshop", "plan"}
-	}
-	allowed := make(map[string]bool, len(types))
-	for _, taskType := range types {
-		taskType = strings.TrimSpace(taskType)
-		if taskType == "" {
+func (c *Config) attestationKinds() map[string]bool {
+	kinds := map[string]bool{}
+	for _, att := range c.Project.Attestations {
+		id := strings.TrimSpace(att.ID)
+		if id == "" {
 			continue
 		}
+		kinds[id] = true
+	}
+	return kinds
+}
+
+func defaultTaskTypes() map[string]bool {
+	types := []string{"technical", "feature", "bug", "docs", "chore", "workshop", "plan"}
+	allowed := make(map[string]bool, len(types))
+	for _, taskType := range types {
 		allowed[taskType] = true
 	}
 	return allowed
@@ -182,7 +203,67 @@ func normalizeTaskTypes(types []string) map[string]bool {
 
 // AllowedTaskTypes returns the task types for this config (defaults when unset).
 func (c *Config) AllowedTaskTypes() map[string]bool {
-	return normalizeTaskTypes(c.TaskTypes)
+	if len(c.Project.TaskTypes) == 0 {
+		return defaultTaskTypes()
+	}
+	allowed := make(map[string]bool, len(c.Project.TaskTypes))
+	for taskType := range c.Project.TaskTypes {
+		tt := strings.TrimSpace(taskType)
+		if tt == "" {
+			continue
+		}
+		allowed[tt] = true
+	}
+	return allowed
+}
+
+// TaskPolicy returns the policy rule for a task type and policy name.
+func (c *Config) TaskPolicy(taskType, policyName string) (PolicyRule, bool) {
+	tt, ok := c.Project.TaskTypes[taskType]
+	if !ok {
+		return PolicyRule{}, false
+	}
+	rule, ok := tt.Policies[policyName]
+	return rule, ok
+}
+
+// DefaultTaskPolicyName returns the default policy name for a task type.
+func (c *Config) DefaultTaskPolicyName(taskType string) string {
+	tt, ok := c.Project.TaskTypes[taskType]
+	if !ok || len(tt.Policies) == 0 {
+		return ""
+	}
+	if _, ok := tt.Policies["done"]; ok {
+		return "done"
+	}
+	names := make([]string, 0, len(tt.Policies))
+	for name := range tt.Policies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names[0]
+}
+
+// IterationValidationPolicy returns the attestation kinds required for validation.
+func (c *Config) IterationValidationPolicy() []string {
+	if len(c.Project.IterationTypes) == 0 {
+		return nil
+	}
+	if it, ok := c.Project.IterationTypes["standard"]; ok {
+		if rule, ok := it.Policies["validation"]; ok {
+			return rule.All
+		}
+	}
+	names := make([]string, 0, len(c.Project.IterationTypes))
+	for name := range c.Project.IterationTypes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	it := c.Project.IterationTypes[names[0]]
+	if rule, ok := it.Policies["validation"]; ok {
+		return rule.All
+	}
+	return nil
 }
 
 // Path returns the config file path for a workspace.
@@ -215,7 +296,6 @@ func LoadOptional(workspace string) (*Config, error) {
 func Default(projectID string) *Config {
 	var cfg Config
 	cfg.Project.ID = projectID
-	cfg.Project.Kind = "software-project"
 	_ = yaml.NewDecoder(bytes.NewBufferString(fmt.Sprintf(defaultTemplate, projectID))).Decode(&cfg)
 	return &cfg
 }
@@ -243,97 +323,229 @@ func FromFile(path string) (*Config, error) {
 
 const defaultTemplate = `project:
   id: %s
-  kind: software-project
-
-task_types:
-  - technical
-  - feature
-  - bug
-  - docs
-  - chore
-  - workshop
-  - plan
-
-attestations:
-  catalog:
-    requirements.accepted:
+  task_types:
+    feature:
+      policies:
+        ready:
+          all: [requirements.accepted, design.reviewed, scope.groomed]
+        done:
+          all: [ci.passed, review.approved, acceptance.passed]
+    bug:
+      policies:
+        done:
+          all: [ci.passed, review.approved]
+    technical:
+      policies:
+        done:
+          all: [ci.passed, review.approved, acceptance.passed]
+    docs:
+      policies:
+        done:
+          all: [ci.passed, review.approved]
+    chore:
+      policies:
+        done:
+          all: [ci.passed, review.approved]
+    workshop:
+      policies:
+        discovery:
+          all: [workshop.discovery.completed]
+        problem_refinement:
+          all: [workshop.problem_refinement.completed]
+        eventstorming:
+          all: [workshop.eventstorming.completed]
+        decision:
+          all: [workshop.decision.completed]
+        clarify:
+          all: [workshop.clarify.completed]
+    plan:
+      policies:
+        done:
+          all: [planning.approved]
+  iteration_types:
+    standard:
+      policies:
+        validation:
+          all: [iteration.approved]
+  attestations:
+    - id: requirements.accepted
+      category: requirements
       description: "Team agreed on scope and requirements"
-    design.reviewed:
+    - id: design.reviewed
+      category: design
       description: "Solution/design reviewed"
-    scope.groomed:
+    - id: scope.groomed
+      category: planning
       description: "Task is sized, dependencies known"
-    ci.passed:
+    - id: ci.passed
+      category: delivery
       description: "CI pipeline completed successfully"
-    review.approved:
+    - id: review.approved
+      category: delivery
       description: "Code review approved"
-    acceptance.passed:
+    - id: acceptance.passed
+      category: delivery
       description: "Acceptance criteria validated"
-    security.ok:
+    - id: security.ok
+      category: security
       description: "Security checks passed"
-    iteration.approved:
+    - id: iteration.approved
+      category: iteration
       description: "Iteration approved"
-    workshop.discovery.completed:
+    - id: workshop.discovery.completed
+      category: workshop
       description: "Discovery workshop completed"
-    workshop.problem_refinement.completed:
+    - id: workshop.problem_refinement.completed
+      category: workshop
       description: "Problem refinement workshop completed"
-    workshop.eventstorming.completed:
+    - id: workshop.eventstorming.completed
+      category: workshop
       description: "Event storming workshop completed"
-    workshop.decision.completed:
+    - id: workshop.decision.completed
+      category: workshop
       description: "Decision workshop completed"
-    workshop.clarify.completed:
+    - id: workshop.clarify.completed
+      category: workshop
       description: "Clarification workshop completed"
-    planning.approved:
+    - id: planning.approved
+      category: planning
       description: "Planning approved"
-
-policies:
-  presets:
-    ready:
-      require: [requirements.accepted, design.reviewed, scope.groomed]
-
-    done.standard:
-      require: [ci.passed, review.approved, acceptance.passed]
-
-    done.bugfix:
-      require: [ci.passed, review.approved]
-
-    low:
-      require: [ci.passed, review.approved]
-
-    medium:
-      require: [ci.passed, review.approved]
-
-    high:
-      require: [ci.passed, review.approved, security.ok]
-
-    workshop.discovery:
-      require: [workshop.discovery.completed]
-
-    workshop.problem_refinement:
-      require: [workshop.problem_refinement.completed]
-
-    workshop.eventstorming:
-      require: [workshop.eventstorming.completed]
-
-    workshop.decision:
-      require: [workshop.decision.completed]
-
-    workshop.clarify:
-      require: [workshop.clarify.completed]
-
-    planning:
-      require: [planning.approved]
-
-  defaults:
-    task:
-      feature: done.standard
-      bug: done.bugfix
-      technical: done.standard
-      docs: low
-      chore: low
-      workshop: workshop.problem_refinement
-      plan: planning
-
-    iteration:
-      validation:
-        require: iteration.approved
+    - id: init.check
+      category: system
+      description: "Initial project check"
+  rbac:
+    permissions:
+      project.viewer:
+        - project.list
+        - project.read
+        - project.config.read
+        - project.status.read
+        - project.events.read
+      project.admin:
+        - project.create
+        - project.update
+        - project.delete
+      task.viewer:
+        - task.list
+        - task.read
+        - task.next
+        - task.tree
+        - task.validation.read
+      task.writer:
+        - task.create
+        - task.update
+        - task.claim
+        - task.release
+      task.executor:
+        - task.done
+      iteration.viewer:
+        - iteration.list
+      iteration.writer:
+        - iteration.create
+        - iteration.list
+        - iteration.set_status
+      decision.writer:
+        - decision.create
+      attestation.viewer:
+        - attestation.list
+      attestation.writer:
+        - attestation.add
+        - attestation.list
+      rbac.admin:
+        - rbac.manage
+      force.use:
+        - force.use
+    roles:
+      owner:
+        description: "Project owner"
+        grants:
+          - project.viewer
+          - project.admin
+          - task.viewer
+          - task.writer
+          - task.executor
+          - iteration.viewer
+          - iteration.writer
+          - decision.writer
+          - attestation.writer
+          - rbac.admin
+          - force.use
+        can_attest:
+          - ci.passed
+          - review.approved
+          - acceptance.passed
+          - security.ok
+          - iteration.approved
+          - init.check
+          - workshop.discovery.completed
+          - workshop.problem_refinement.completed
+          - workshop.eventstorming.completed
+          - workshop.decision.completed
+          - workshop.clarify.completed
+          - planning.approved
+      planner:
+        description: "Plans work and creates backlog"
+        grants:
+          - project.viewer
+          - task.viewer
+          - task.writer
+          - iteration.viewer
+          - iteration.writer
+          - decision.writer
+          - attestation.viewer
+        can_attest:
+          - workshop.discovery.completed
+          - workshop.problem_refinement.completed
+          - workshop.eventstorming.completed
+          - workshop.decision.completed
+          - workshop.clarify.completed
+      executor:
+        description: "Executes tasks and updates status"
+        grants:
+          - project.viewer
+          - task.viewer
+          - task.writer
+          - task.executor
+          - iteration.viewer
+          - iteration.writer
+          - attestation.writer
+        can_attest:
+          - ci.passed
+      reviewer:
+        description: "Reviews work and approves gates"
+        grants:
+          - project.viewer
+          - task.viewer
+          - iteration.viewer
+          - attestation.writer
+        can_attest:
+          - review.approved
+          - acceptance.passed
+          - iteration.approved
+          - planning.approved
+      dev:
+        description: "Developer"
+        grants:
+          - project.viewer
+          - task.viewer
+          - task.writer
+          - task.executor
+          - iteration.viewer
+          - attestation.viewer
+      security:
+        description: "Security"
+        grants:
+          - project.viewer
+          - task.viewer
+          - iteration.viewer
+          - attestation.writer
+        can_attest:
+          - security.ok
+      observer:
+        description: "Read-only observer"
+        grants:
+          - project.viewer
+          - task.viewer
+          - iteration.viewer
+          - attestation.viewer
 `

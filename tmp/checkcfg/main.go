@@ -49,9 +49,9 @@ func main() {
 	token := signToken(jwtSecret, "tester", "default-org", time.Now().Add(time.Hour))
 
 	body := map[string]any{
-		"title": "Needs validation",
-		"type":  "feature",
-		"policy": map[string]any{"preset": "done.standard"},
+		"title":  "Needs validation",
+		"type":   "feature",
+		"policy": map[string]any{"preset": "done"},
 	}
 	b, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/v0/projects/workline/tasks", bytes.NewReader(b))
@@ -81,7 +81,7 @@ func signToken(secret, actorID, orgID string, expiresAt time.Time) string {
 		b, _ := json.Marshal(v)
 		return base64RawURLEncode(b)
 	}
-	sig := hmacSHA256(enc(header) + "." + enc(claims), secret)
+	sig := hmacSHA256(enc(header)+"."+enc(claims), secret)
 	return enc(header) + "." + enc(claims) + "." + sig
 }
 

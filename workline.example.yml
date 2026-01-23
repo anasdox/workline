@@ -6,23 +6,23 @@ project:
         ready:
           all: [requirements.accepted, design.reviewed, scope.groomed]
         done:
-          all: [ci.passed, review.approved, acceptance.passed]
+          all: [ci.passed, review.approved, analysis.validated, analysis.adversarial.reviewed, acceptance.passed, responsibility.accepted]
     bug:
       policies:
         done:
-          all: [ci.passed, review.approved]
+          all: [ci.passed, review.approved, analysis.validated]
     technical:
       policies:
         done:
-          all: [ci.passed, review.approved, acceptance.passed]
+          all: [ci.passed, review.approved, analysis.validated]
     docs:
       policies:
         done:
-          all: [ci.passed, review.approved]
+          all: [review.approved, analysis.validated]
     chore:
       policies:
         done:
-          all: [ci.passed, review.approved]
+          all: [review.approved, analysis.validated]
     workshop:
       policies:
         discovery:
@@ -38,7 +38,15 @@ project:
     plan:
       policies:
         done:
-          all: [planning.approved]
+          all: [planning.approved, responsibility.accepted]
+    decision:
+      policies:
+        done:
+          all: [review.approved, analysis.validated, responsibility.accepted]
+    security:
+      policies:
+        done:
+          all: [security.ok, review.approved, analysis.validated, responsibility.accepted]
   iteration_types:
     standard:
       policies:
@@ -63,6 +71,15 @@ project:
     - id: acceptance.passed
       category: delivery
       description: "Acceptance criteria validated"
+    - id: analysis.validated
+      category: analysis
+      description: "Coherence and robustness validated"
+    - id: analysis.adversarial.reviewed
+      category: analysis
+      description: "Adversarial review completed"
+    - id: responsibility.accepted
+      category: responsibility
+      description: "Human accepts the decision and its impact"
     - id: security.ok
       category: security
       description: "Security checks passed"
@@ -90,6 +107,16 @@ project:
     - id: init.check
       category: system
       description: "Initial project check"
+  validation:
+    mode: adversarial
+    challenger_prompt: >
+      Identify incorrect assumptions, missing constraints,
+      edge cases, ambiguities, and risks.
+  actor_missions:
+    - actor_id: planner-agent
+      mission: "Plan the backlog, clarify scope, and keep tasks ready."
+    - actor_id: executor-agent
+      mission: "Execute tasks, update status, and attach outcomes."
   rbac:
     permissions:
       project.viewer:
@@ -128,6 +155,18 @@ project:
       attestation.writer:
         - attestation.add
         - attestation.list
+      validation.viewer:
+        - validation.read
+        - validation.list
+      validation.writer:
+        - validation.create
+        - validation.update
+      actor.mission.viewer:
+        - actor.mission.read
+        - actor.mission.list
+      actor.mission.writer:
+        - actor.mission.write
+        - actor.mission.delete
       rbac.admin:
         - rbac.manage
       force.use:
@@ -145,12 +184,17 @@ project:
           - iteration.writer
           - decision.writer
           - attestation.writer
+          - validation.viewer
+          - validation.writer
+          - actor.mission.viewer
+          - actor.mission.writer
           - rbac.admin
           - force.use
         can_attest:
           - ci.passed
           - review.approved
           - acceptance.passed
+          - responsibility.accepted
           - security.ok
           - iteration.approved
           - init.check
@@ -195,7 +239,11 @@ project:
           - task.viewer
           - iteration.viewer
           - attestation.writer
+          - validation.viewer
+          - validation.writer
         can_attest:
+          - analysis.validated
+          - analysis.adversarial.reviewed
           - review.approved
           - acceptance.passed
           - iteration.approved

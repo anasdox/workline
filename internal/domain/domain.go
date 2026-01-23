@@ -84,3 +84,34 @@ type APIKey struct {
 	KeyHash   string `json:"key_hash"`
 	CreatedAt string `json:"created_at" format:"date-time"`
 }
+
+type ActorMission struct {
+	ProjectID string `json:"project_id"`
+	ActorID   string `json:"actor_id"`
+	Mission   string `json:"mission"`
+	CreatedAt string `json:"created_at" format:"date-time"`
+	UpdatedAt string `json:"updated_at" format:"date-time"`
+}
+
+type ActorProfile struct {
+	ProjectID    string   `json:"project_id"`
+	ActorID      string   `json:"actor_id"`
+	Mission      string   `json:"mission,omitempty"`
+	Actions      []string `json:"actions"`
+	Attestations []string `json:"attestations"`
+	Roles        []string `json:"roles"`
+}
+
+type Validation struct {
+	ID        string   `json:"id"`
+	ProjectID string   `json:"project_id"`
+	TaskID    string   `json:"task_id"`
+	Kind      string   `json:"kind"`
+	Status    string   `json:"status"`
+	Summary   string   `json:"summary,omitempty"`
+	Issues    []string `json:"issues,omitempty"`
+	URL       string   `json:"url,omitempty"`
+	CreatedBy string   `json:"created_by"`
+	CreatedAt string   `json:"created_at" format:"date-time"`
+	UpdatedAt string   `json:"updated_at" format:"date-time"`
+}

@@ -96,11 +96,13 @@ func New(cfg Config) (http.Handler, error) {
 	registerStatus(group, cfg.Engine)
 	registerProjects(group, cfg.Engine)
 	registerTasks(group, cfg.Engine)
+	registerValidations(group, cfg.Engine)
 	registerIterations(group, cfg.Engine)
 	registerDecisions(group, cfg.Engine)
 	registerAttestations(group, cfg.Engine)
 	registerEvents(group, cfg.Engine)
 	registerRBAC(group, cfg.Engine)
+	registerActorMissions(group, cfg.Engine)
 	registerMe(group, cfg.Engine)
 	registerDevAuth(group, cfg.Engine, cfg.Auth)
 	registerOpenAPI(router, api, basePath)
@@ -1374,6 +1376,160 @@ func registerTasks(api huma.API, e engine.Engine) {
 	})
 }
 
+func registerValidations(api huma.API, e engine.Engine) {
+	huma.Register(api, huma.Operation{
+		OperationID:   "create-validation",
+		Method:        http.MethodPost,
+		Path:          "/projects/{project_id}/tasks/{id}/validations",
+		Summary:       "Create validation",
+		DefaultStatus: http.StatusCreated,
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusUnprocessableEntity,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string            `path:"project_id"`
+		ID        string            `path:"id"`
+		Body      ValidationRequest `json:"body"`
+	}) (*struct {
+		Body ValidationResponse `json:"body"`
+	}, error) {
+		if strings.TrimSpace(input.Body.Kind) == "" {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "kind is required", map[string]any{"field": "kind"})
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		v, err := e.CreateValidation(ctx, engine.ValidationCreateOptions{
+			ProjectID: projectID,
+			TaskID:    input.ID,
+			Kind:      input.Body.Kind,
+			Status:    input.Body.Status,
+			Summary:   input.Body.Summary,
+			Issues:    input.Body.Issues,
+			URL:       input.Body.URL,
+			ActorID:   actorID,
+		})
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body ValidationResponse `json:"body"`
+		}{Body: validationResponse(v)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-validations",
+		Method:      http.MethodGet,
+		Path:        "/projects/{project_id}/tasks/{id}/validations",
+		Summary:     "List validations for task",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string `path:"project_id"`
+		ID        string `path:"id"`
+	}) (*struct {
+		Body ValidationsResponse `json:"body"`
+	}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		items, err := e.ListValidations(ctx, projectID, input.ID, actorID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		resp := ValidationsResponse{Items: []ValidationResponse{}}
+		for _, v := range items {
+			resp.Items = append(resp.Items, validationResponse(v))
+		}
+		return &struct {
+			Body ValidationsResponse `json:"body"`
+		}{Body: resp}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-validation",
+		Method:      http.MethodGet,
+		Path:        "/projects/{project_id}/validations/{id}",
+		Summary:     "Get validation",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string `path:"project_id"`
+		ID        string `path:"id"`
+	}) (*struct {
+		Body ValidationResponse `json:"body"`
+	}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		v, err := e.GetValidation(ctx, projectID, input.ID, actorID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body ValidationResponse `json:"body"`
+		}{Body: validationResponse(v)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "update-validation",
+		Method:      http.MethodPatch,
+		Path:        "/projects/{project_id}/validations/{id}",
+		Summary:     "Update validation",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusUnprocessableEntity,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string            `path:"project_id"`
+		ID        string            `path:"id"`
+		Body      ValidationRequest `json:"body"`
+	}) (*struct {
+		Body ValidationResponse `json:"body"`
+	}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		updated, err := e.UpdateValidation(ctx, engine.ValidationUpdateOptions{
+			ID:      input.ID,
+			Kind:    input.Body.Kind,
+			Status:  input.Body.Status,
+			Summary: input.Body.Summary,
+			Issues:  input.Body.Issues,
+			URL:     input.Body.URL,
+			ActorID: actorID,
+		})
+		if err != nil {
+			return nil, handleError(err)
+		}
+		if updated.ProjectID != projectID {
+			return nil, newAPIError(http.StatusNotFound, "not_found", "validation not found in project", nil)
+		}
+		return &struct {
+			Body ValidationResponse `json:"body"`
+		}{Body: validationResponse(updated)}, nil
+	})
+}
+
 func registerWorkOutcomesUpdates(api huma.API, e engine.Engine) {
 	registerWorkOutcomesAppend(api, e)
 	registerWorkOutcomesPut(api, e)
@@ -2057,6 +2213,162 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			return nil, handleError(err)
 		}
 		return &struct{}{}, nil
+	})
+}
+
+func registerActorMissions(api huma.API, e engine.Engine) {
+	huma.Register(api, huma.Operation{
+		OperationID: "list-actor-missions",
+		Method:      http.MethodGet,
+		Path:        "/projects/{project_id}/actor-missions",
+		Summary:     "List actor missions",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string `path:"project_id"`
+		ActorID   string `query:"actor_id"`
+	}) (*struct {
+		Body ActorMissionsResponse `json:"body"`
+	}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		items, err := e.ListActorMissions(ctx, projectID, input.ActorID, actorID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		resp := ActorMissionsResponse{Items: []ActorMissionResponse{}}
+		for _, item := range items {
+			resp.Items = append(resp.Items, actorMissionResponse(item))
+		}
+		return &struct {
+			Body ActorMissionsResponse `json:"body"`
+		}{Body: resp}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-actor-mission",
+		Method:      http.MethodGet,
+		Path:        "/projects/{project_id}/actor-missions/{actor_id}",
+		Summary:     "Get actor mission",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string `path:"project_id"`
+		ActorID   string `path:"actor_id"`
+	}) (*struct {
+		Body ActorMissionResponse `json:"body"`
+	}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		m, err := e.GetActorMission(ctx, projectID, input.ActorID, actorID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body ActorMissionResponse `json:"body"`
+		}{Body: actorMissionResponse(m)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "set-actor-mission",
+		Method:      http.MethodPut,
+		Path:        "/projects/{project_id}/actor-missions/{actor_id}",
+		Summary:     "Set actor mission",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusUnprocessableEntity,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string              `path:"project_id"`
+		ActorID   string              `path:"actor_id"`
+		Body      ActorMissionRequest `json:"body"`
+	}) (*struct {
+		Body ActorMissionResponse `json:"body"`
+	}, error) {
+		if strings.TrimSpace(input.Body.Mission) == "" {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "mission is required", map[string]any{"field": "mission"})
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		m, err := e.SetActorMission(ctx, projectID, input.ActorID, input.Body.Mission, actorID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body ActorMissionResponse `json:"body"`
+		}{Body: actorMissionResponse(m)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-actor-mission",
+		Method:      http.MethodDelete,
+		Path:        "/projects/{project_id}/actor-missions/{actor_id}",
+		Summary:     "Delete actor mission",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string `path:"project_id"`
+		ActorID   string `path:"actor_id"`
+	}) (*struct{}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := e.DeleteActorMission(ctx, projectID, input.ActorID, actorID); err != nil {
+			return nil, handleError(err)
+		}
+		return &struct{}{}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-actor-profile",
+		Method:      http.MethodGet,
+		Path:        "/projects/{project_id}/actors/{actor_id}/profile",
+		Summary:     "Get actor profile",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string `path:"project_id"`
+		ActorID   string `path:"actor_id"`
+	}) (*struct {
+		Body ActorProfileResponse `json:"body"`
+	}, error) {
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		profile, err := e.ActorProfile(ctx, projectID, input.ActorID, actorID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body ActorProfileResponse `json:"body"`
+		}{Body: actorProfileResponse(profile)}, nil
 	})
 }
 

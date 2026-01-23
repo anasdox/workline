@@ -63,6 +63,31 @@ type Event struct {
 	Payload    map[string]any `json:"payload"`
 }
 
+// Validation represents a validation artifact.
+type Validation struct {
+	ID        string   `json:"id"`
+	ProjectID string   `json:"project_id"`
+	TaskID    string   `json:"task_id"`
+	Kind      string   `json:"kind"`
+	Status    string   `json:"status"`
+	Summary   string   `json:"summary"`
+	Issues    []string `json:"issues"`
+	URL       string   `json:"url"`
+	CreatedBy string   `json:"created_by"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
+}
+
+// ActorProfile represents an actor's mission and capabilities.
+type ActorProfile struct {
+	ProjectID    string   `json:"project_id"`
+	ActorID      string   `json:"actor_id"`
+	Mission      string   `json:"mission"`
+	Actions      []string `json:"actions"`
+	Attestations []string `json:"attestations"`
+	Roles        []string `json:"roles"`
+}
+
 // APIError wraps non-2xx responses.
 type APIError struct {
 	StatusCode int
@@ -124,6 +149,62 @@ func (c *Client) EventsPage(ctx context.Context, limit int, cursor string) (Pagi
 	}
 	var resp PaginatedEvents
 	err := c.do(ctx, http.MethodGet, endpoint, nil, &resp)
+	return resp, err
+}
+
+// ActorProfile returns the mission, actions, and attestations for an actor.
+func (c *Client) ActorProfile(ctx context.Context, actorID string) (ActorProfile, error) {
+	var resp ActorProfile
+	endpoint := c.projectPath(fmt.Sprintf("actors/%s/profile", url.PathEscape(actorID)))
+	err := c.do(ctx, http.MethodGet, endpoint, nil, &resp)
+	return resp, err
+}
+
+// CreateValidation creates a validation artifact for a task.
+func (c *Client) CreateValidation(ctx context.Context, taskID, kind, status, summary string, issues []string, artifactURL string) (Validation, error) {
+	body := map[string]any{
+		"kind":    kind,
+		"status":  status,
+		"summary": summary,
+		"issues":  issues,
+		"url":     artifactURL,
+	}
+	var resp Validation
+	endpoint := c.projectPath(fmt.Sprintf("tasks/%s/validations", url.PathEscape(taskID)))
+	err := c.do(ctx, http.MethodPost, endpoint, body, &resp)
+	return resp, err
+}
+
+// ListValidations returns validations for a task.
+func (c *Client) ListValidations(ctx context.Context, taskID string) ([]Validation, error) {
+	var resp struct {
+		Items []Validation `json:"items"`
+	}
+	endpoint := c.projectPath(fmt.Sprintf("tasks/%s/validations", url.PathEscape(taskID)))
+	err := c.do(ctx, http.MethodGet, endpoint, nil, &resp)
+	return resp.Items, err
+}
+
+// GetValidation fetches a validation by id.
+func (c *Client) GetValidation(ctx context.Context, id string) (Validation, error) {
+	var resp Validation
+	endpoint := c.projectPath(fmt.Sprintf("validations/%s", url.PathEscape(id)))
+	err := c.do(ctx, http.MethodGet, endpoint, nil, &resp)
+	return resp, err
+}
+
+// UpdateValidation updates a validation artifact.
+func (c *Client) UpdateValidation(ctx context.Context, id, kind, status, summary string, issues []string, artifactURL string) (Validation, error) {
+	body := map[string]any{
+		"kind":    kind,
+		"status":  status,
+		"summary": summary,
+		"issues":  issues,
+		"url":     artifactURL,
+	}
+	var resp Validation
+	endpoint := c.projectPath(fmt.Sprintf("validations/%s", url.PathEscape(id)))
+	err := c.do(ctx, http.MethodPatch, endpoint, body, &resp)
 	return resp, err
 }
 

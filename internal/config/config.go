@@ -18,6 +18,8 @@ type Config struct {
 		TaskTypes      map[string]TaskTypeConfig    `yaml:"task_types"`
 		IterationTypes map[string]IterationTypeSpec `yaml:"iteration_types"`
 		Attestations   []AttestationConfig          `yaml:"attestations"`
+		ActorMissions  []ActorMissionConfig         `yaml:"actor_missions,omitempty"`
+		Validation     ValidationConfig             `yaml:"validation,omitempty"`
 		RBAC           RBACConfig                   `yaml:"rbac"`
 	} `yaml:"project"`
 	Webhooks []WebhookConfig `yaml:"webhooks"`
@@ -39,6 +41,16 @@ type AttestationConfig struct {
 	ID          string `yaml:"id"`
 	Category    string `yaml:"category"`
 	Description string `yaml:"description"`
+}
+
+type ActorMissionConfig struct {
+	ActorID string `yaml:"actor_id"`
+	Mission string `yaml:"mission"`
+}
+
+type ValidationConfig struct {
+	Mode             string `yaml:"mode,omitempty"`
+	ChallengerPrompt string `yaml:"challenger_prompt,omitempty"`
 }
 
 type RBACConfig struct {
@@ -133,6 +145,22 @@ func (c *Config) Validate() error {
 			seen[att.ID] = true
 		}
 	}
+	if c.Project.ActorMissions != nil {
+		seen := map[string]bool{}
+		for i, m := range c.Project.ActorMissions {
+			actorID := strings.TrimSpace(m.ActorID)
+			if actorID == "" {
+				return fmt.Errorf("config.project.actor_missions[%d].actor_id is required", i)
+			}
+			if strings.TrimSpace(m.Mission) == "" {
+				return fmt.Errorf("config.project.actor_missions[%d].mission is required", i)
+			}
+			if seen[actorID] {
+				return fmt.Errorf("config.project.actor_missions contains duplicate actor_id %s", actorID)
+			}
+			seen[actorID] = true
+		}
+	}
 	if len(c.Project.RBAC.Roles) > 0 {
 		if len(c.Project.RBAC.Permissions) == 0 {
 			return fmt.Errorf("config.project.rbac.permissions is required when roles are defined")
@@ -193,7 +221,7 @@ func (c *Config) attestationKinds() map[string]bool {
 }
 
 func defaultTaskTypes() map[string]bool {
-	types := []string{"technical", "feature", "bug", "docs", "chore", "workshop", "plan"}
+	types := []string{"technical", "feature", "bug", "docs", "chore", "workshop", "plan", "decision", "security"}
 	allowed := make(map[string]bool, len(types))
 	for _, taskType := range types {
 		allowed[taskType] = true
@@ -329,23 +357,23 @@ const defaultTemplate = `project:
         ready:
           all: [requirements.accepted, design.reviewed, scope.groomed]
         done:
-          all: [ci.passed, review.approved, acceptance.passed]
+          all: [ci.passed, review.approved, analysis.validated, analysis.adversarial.reviewed, acceptance.passed, responsibility.accepted]
     bug:
       policies:
         done:
-          all: [ci.passed, review.approved]
+          all: [ci.passed, review.approved, analysis.validated]
     technical:
       policies:
         done:
-          all: [ci.passed, review.approved, acceptance.passed]
+          all: [ci.passed, review.approved, analysis.validated]
     docs:
       policies:
         done:
-          all: [ci.passed, review.approved]
+          all: [review.approved, analysis.validated]
     chore:
       policies:
         done:
-          all: [ci.passed, review.approved]
+          all: [review.approved, analysis.validated]
     workshop:
       policies:
         discovery:
@@ -361,7 +389,15 @@ const defaultTemplate = `project:
     plan:
       policies:
         done:
-          all: [planning.approved]
+          all: [planning.approved, responsibility.accepted]
+    decision:
+      policies:
+        done:
+          all: [review.approved, analysis.validated, responsibility.accepted]
+    security:
+      policies:
+        done:
+          all: [security.ok, review.approved, analysis.validated, responsibility.accepted]
   iteration_types:
     standard:
       policies:
@@ -386,6 +422,15 @@ const defaultTemplate = `project:
     - id: acceptance.passed
       category: delivery
       description: "Acceptance criteria validated"
+    - id: analysis.validated
+      category: analysis
+      description: "Coherence and robustness validated"
+    - id: analysis.adversarial.reviewed
+      category: analysis
+      description: "Adversarial review completed"
+    - id: responsibility.accepted
+      category: responsibility
+      description: "Human accepts the decision and its impact"
     - id: security.ok
       category: security
       description: "Security checks passed"
@@ -413,6 +458,11 @@ const defaultTemplate = `project:
     - id: init.check
       category: system
       description: "Initial project check"
+  validation:
+    mode: adversarial
+    challenger_prompt: >
+      Identify incorrect assumptions, missing constraints,
+      edge cases, ambiguities, and risks.
   rbac:
     permissions:
       project.viewer:
@@ -451,6 +501,18 @@ const defaultTemplate = `project:
       attestation.writer:
         - attestation.add
         - attestation.list
+      validation.viewer:
+        - validation.read
+        - validation.list
+      validation.writer:
+        - validation.create
+        - validation.update
+      actor.mission.viewer:
+        - actor.mission.read
+        - actor.mission.list
+      actor.mission.writer:
+        - actor.mission.write
+        - actor.mission.delete
       rbac.admin:
         - rbac.manage
       force.use:
@@ -468,12 +530,17 @@ const defaultTemplate = `project:
           - iteration.writer
           - decision.writer
           - attestation.writer
+          - validation.viewer
+          - validation.writer
+          - actor.mission.viewer
+          - actor.mission.writer
           - rbac.admin
           - force.use
         can_attest:
           - ci.passed
           - review.approved
           - acceptance.passed
+          - responsibility.accepted
           - security.ok
           - iteration.approved
           - init.check
@@ -518,7 +585,11 @@ const defaultTemplate = `project:
           - task.viewer
           - iteration.viewer
           - attestation.writer
+          - validation.viewer
+          - validation.writer
         can_attest:
+          - analysis.validated
+          - analysis.adversarial.reviewed
           - review.approved
           - acceptance.passed
           - iteration.approved

@@ -34,15 +34,16 @@ var rootCmd = &cobra.Command{
 	Short: "Workline CLI",
 	Long: `Workline tracks project work with attestations and policy-driven validation.
 Core concepts (kid-friendly):
-- Why it matters: attestations are proof stickers and policies are the rules; together they stop "done" from being just a checkbox and keep quality consistent without nagging.
+- Why it matters: attestations are outcome stickers and policies are the rules; together they stop "done" from being just a checkbox and keep quality consistent without nagging.
 - Workspace: your .workline toy box with only the database; configs are stored in the DB and imported explicitly.
 - Project: the one big game inside that box that owns all tasks, iterations, and evidence.
-- Policies: presets say what proof a task needs (required attestation kinds); task types map to presets by default.
-- Definition of Ready (DoR): proof stickers that say a task is ready to start (requirements accepted, design reviewed, scope groomed).
-- Definition of Done (DoD): proof stickers that say a task is truly done (tests passed, review approved, acceptance checked); enforced by presets per task type.
+- Policies: presets say what outcomes a task needs (required attestation kinds); task types map to presets by default.
+- Validation: analysis that checks coherence and robustness (can be adversarial).
+- Attestations: factual (deterministic checks) or responsibility (a human accepts the decision).
+- Definition of Ready (DoR): readiness outcomes (requirements accepted, design reviewed, scope groomed).
+- Definition of Done (DoD): done outcomes (tests passed, review approved, acceptance checked); enforced by presets per task type.
 - Tasks: work items with parents/deps/leases; statuses go planned -> ready -> in_progress -> review -> done (rejected/canceled are exits).
 - Iterations: smaller adventures that move pending -> running -> delivered -> validated/rejected; validation can require a catalog attestation.
-- Attestations: proof stickers like ci.passed or review.approved that satisfy policies.
 - Leases: temporary "I’m working on this" tags (wl task claim/release).
 - Event log: diary of changes, view with 'wl log tail'.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -94,6 +95,8 @@ func registerCommands() {
 	rootCmd.AddCommand(logCmd())
 	rootCmd.AddCommand(serveCmd())
 	rootCmd.AddCommand(rbacCmd())
+	rootCmd.AddCommand(missionCmd())
+	rootCmd.AddCommand(validationCmd())
 	rootCmd.AddCommand(apiKeyCmd())
 }
 
@@ -924,6 +927,212 @@ func rbacCmd() *cobra.Command {
 	cmd.AddCommand(rbacAllowAttCmd())
 	cmd.AddCommand(rbacDenyAttCmd())
 	cmd.AddCommand(rbacBootstrapCmd())
+	return cmd
+}
+
+func missionCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "mission",
+		Short: "Manage actor missions",
+	}
+	cmd.AddCommand(missionGetCmd())
+	cmd.AddCommand(missionListCmd())
+	cmd.AddCommand(missionSetCmd())
+	cmd.AddCommand(missionDeleteCmd())
+	return cmd
+}
+
+func missionGetCmd() *cobra.Command {
+	var actorID string
+	cmd := &cobra.Command{
+		Use:   "get",
+		Short: "Get actor mission",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(actorID) == "" {
+				return fmt.Errorf("--actor required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				m, err := e.GetActorMission(ctx, e.Config.Project.ID, actorID, viper.GetString("actor-id"))
+				if err != nil {
+					return err
+				}
+				return printJSONOrTable(m)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&actorID, "actor", "", "actor id")
+	return cmd
+}
+
+func missionListCmd() *cobra.Command {
+	var actorID string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List actor missions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				items, err := e.ListActorMissions(ctx, e.Config.Project.ID, actorID, viper.GetString("actor-id"))
+				if err != nil {
+					return err
+				}
+				return printJSONOrTable(items)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&actorID, "actor", "", "filter by actor id")
+	return cmd
+}
+
+func missionSetCmd() *cobra.Command {
+	var actorID, mission string
+	cmd := &cobra.Command{
+		Use:   "set",
+		Short: "Set actor mission",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(actorID) == "" {
+				return fmt.Errorf("--actor required")
+			}
+			if strings.TrimSpace(mission) == "" {
+				return fmt.Errorf("--mission required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				m, err := e.SetActorMission(ctx, e.Config.Project.ID, actorID, mission, viper.GetString("actor-id"))
+				if err != nil {
+					return err
+				}
+				return printJSONOrTable(m)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&actorID, "actor", "", "actor id")
+	cmd.Flags().StringVar(&mission, "mission", "", "mission text")
+	return cmd
+}
+
+func missionDeleteCmd() *cobra.Command {
+	var actorID string
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "Delete actor mission",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(actorID) == "" {
+				return fmt.Errorf("--actor required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				return e.DeleteActorMission(ctx, e.Config.Project.ID, actorID, viper.GetString("actor-id"))
+			})
+		},
+	}
+	cmd.Flags().StringVar(&actorID, "actor", "", "actor id")
+	return cmd
+}
+
+func validationCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "validation",
+		Short: "Manage validations",
+	}
+	cmd.AddCommand(validationCreateCmd())
+	cmd.AddCommand(validationListCmd())
+	cmd.AddCommand(validationUpdateCmd())
+	return cmd
+}
+
+func validationCreateCmd() *cobra.Command {
+	var taskID, kind, status, summary, url string
+	var issues []string
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create validation for a task",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(taskID) == "" {
+				return fmt.Errorf("--task required")
+			}
+			if strings.TrimSpace(kind) == "" {
+				return fmt.Errorf("--kind required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				v, err := e.CreateValidation(ctx, engine.ValidationCreateOptions{
+					ProjectID: e.Config.Project.ID,
+					TaskID:    taskID,
+					Kind:      kind,
+					Status:    status,
+					Summary:   summary,
+					Issues:    issues,
+					URL:       url,
+					ActorID:   viper.GetString("actor-id"),
+				})
+				if err != nil {
+					return err
+				}
+				return printJSONOrTable(v)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&taskID, "task", "", "task id")
+	cmd.Flags().StringVar(&kind, "kind", "", "validation kind (adversarial, checklist, logic)")
+	cmd.Flags().StringVar(&status, "status", "draft", "validation status (draft, accepted, rejected)")
+	cmd.Flags().StringVar(&summary, "summary", "", "summary text")
+	cmd.Flags().StringVar(&url, "url", "", "artifact URL")
+	cmd.Flags().StringArrayVar(&issues, "issue", nil, "issue (repeatable)")
+	return cmd
+}
+
+func validationListCmd() *cobra.Command {
+	var taskID string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List validations for a task",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(taskID) == "" {
+				return fmt.Errorf("--task required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				items, err := e.ListValidations(ctx, e.Config.Project.ID, taskID, viper.GetString("actor-id"))
+				if err != nil {
+					return err
+				}
+				return printJSONOrTable(items)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&taskID, "task", "", "task id")
+	return cmd
+}
+
+func validationUpdateCmd() *cobra.Command {
+	var id, kind, status, summary, url string
+	var issues []string
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Update validation",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(id) == "" {
+				return fmt.Errorf("--id required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				v, err := e.UpdateValidation(ctx, engine.ValidationUpdateOptions{
+					ID:      id,
+					Kind:    kind,
+					Status:  status,
+					Summary: summary,
+					Issues:  issues,
+					URL:     url,
+					ActorID: viper.GetString("actor-id"),
+				})
+				if err != nil {
+					return err
+				}
+				return printJSONOrTable(v)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&id, "id", "", "validation id")
+	cmd.Flags().StringVar(&kind, "kind", "", "validation kind (adversarial, checklist, logic)")
+	cmd.Flags().StringVar(&status, "status", "", "validation status (draft, accepted, rejected)")
+	cmd.Flags().StringVar(&summary, "summary", "", "summary text")
+	cmd.Flags().StringVar(&url, "url", "", "artifact URL")
+	cmd.Flags().StringArrayVar(&issues, "issue", nil, "issue (repeatable)")
 	return cmd
 }
 

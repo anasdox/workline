@@ -1,23 +1,18 @@
 Workline
 ========
 
-Workline is an agent-first project manager: reliable storage (SQLite) plus a typed API for tasks, iterations, attestations, and policies. The goal is simple: replace fragile checklists with explicit proof (attestations) and verifiable rules (policies).
+Machines attest facts. Humans attest decisions.
 
-At a glance
------------
-- You create tasks and iterations.
-- You attach proofs (tests OK, review OK, etc.).
-- Policies automatically verify whether a task is truly "ready" or "done".
-- Everything is recorded in an event log for traceability.
+Workline is an agent-first project manager that makes this distinction explicit.
 
-Why Workline
-------------
-AI agents and human teams lose context quickly: "done" becomes fuzzy, rules vary by person, and proof is scattered. Workline makes the workflow explicit:
-- Proof attached to objects (attestations).
-- Rules per task type (policies).
-- A full history of decisions (events).
+What it does:
+- Turns outcomes into attestations you can trust.
+- Enforces simple, local policies for ready and done.
+- Keeps decisions traceable and responsibility human.
 
-1 human + 1 AI = team. So project, governance, quality, maintainability. Workline covers that need: shared backlog, clear deliverables, workflow, validation, memory, protocols.
+Why it matters:
+- AI creates silent risk; Workline makes critique visible.
+- Proof is explicit; accountability is named.
 
 Where data lives
 ----------------
@@ -29,10 +24,36 @@ Core concepts (pedagogical version)
 - Project: the main game in your workspace.
 - Task: a unit of work (feature, bug, docs, etc.).
 - Iteration: a slice of work (sprint, release).
-- Attestation: proof (e.g. `ci.passed`, `review.approved`).
+- Validation: analysis that checks coherence and robustness (can be adversarial).
+- Attestation (factual): a deterministic property is true (e.g. `ci.passed`).
+- Attestation (responsibility): a human accepts a decision and its impact (e.g. `responsibility.accepted`).
 - Policy: a rule that requires attestations for a gate (ready, done, validation).
-- DoR / DoD: definitions of "ready" / "done" based on proof.
+- DoR / DoD: definitions of "ready" / "done" based on outcomes.
 - Event log: a journal of everything that changes.
+
+Validation artifacts
+--------------------
+Validation is a first-class artifact (like an output), and can be stored locally or referenced by URL.
+Minimal schema:
+- `status`: `draft | accepted | rejected`
+- `summary`
+- `issues[]`
+- `url` (optional)
+
+Example (adversarial validation):
+```
+# Adversarial Validation
+
+## Issues Identified
+- Assumption A is implicit and unverified
+- Edge case B is not addressed
+- Risk C is acknowledged but not mitigated
+```
+
+Mapping validation to "done"
+----------------------------
+- If a validation exists with `status = rejected`, `done` is blocked.
+- Validation requirements are expressed via attestation policies (e.g. require `analysis.validated`).
 
 Task lifecycle
 --------------
@@ -58,7 +79,7 @@ Initialization
 --------------
 Nothing to run up front: the DB is created on first CLI use.
 On first usage, Workline seeds:
-- Base attestations: `requirements.accepted`, `design.reviewed`, `scope.groomed`, `ci.passed`, `review.approved`, `acceptance.passed`, `security.ok`, `iteration.approved`.
+- Base attestations: `requirements.accepted`, `design.reviewed`, `scope.groomed`, `ci.passed`, `review.approved`, `analysis.validated`, `analysis.adversarial.reviewed`, `acceptance.passed`, `responsibility.accepted`, `security.ok`, `iteration.approved`.
 - Policies per task type: `project.task_types.<type>.policies`.
 - Iteration validation: `project.iteration_types.standard.policies.validation`.
 - RBAC: permissions, roles, and attestation capabilities.
@@ -70,6 +91,15 @@ Configuration
 - Import a YAML file: `wl project config import --file workline.example.yml`.
 - Policies per type: `project.task_types.<type>.policies` (gates `ready`, `done`).
 - Iteration validation: `project.iteration_types.<name>.policies.validation`.
+- Responsibility attestation is typically required only for higher-impact types (e.g. `feature`, `decision`, `plan`, `security`).
+- Validation configuration (optional):
+  ```yaml
+  validation:
+    mode: adversarial
+    challenger_prompt: >
+      Identify incorrect assumptions, missing constraints,
+      edge cases, ambiguities, and risks.
+  ```
 
 Quick Start
 -----------

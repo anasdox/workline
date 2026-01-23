@@ -39,6 +39,31 @@ class Event:
     payload: Any = None
 
 
+@dataclass
+class Validation:
+    id: str
+    project_id: str
+    task_id: str
+    kind: str
+    status: str
+    summary: Optional[str]
+    issues: List[str]
+    url: Optional[str]
+    created_by: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass
+class ActorProfile:
+    project_id: str
+    actor_id: str
+    mission: Optional[str]
+    actions: List[str]
+    attestations: List[str]
+    roles: List[str]
+
+
 class APIError(RuntimeError):
     def __init__(self, status_code: int, body: Any):
         super().__init__(f"API error {status_code}: {body}")
@@ -184,3 +209,122 @@ class WorklineClient:
     def merge_work_outcomes(self, task_id: str, path: str, value: Dict[str, Any]) -> Dict[str, Any]:
         url = self._project_path(f"tasks/{task_id}/work-outcomes/merge")
         return self._request("POST", url, {"path": path, "value": value})
+
+    def actor_profile(self, actor_id: Optional[str] = None) -> ActorProfile:
+        target = actor_id or self.actor_id
+        if not target:
+            raise ValueError("actor_id is required")
+        url = self._project_path(f"actors/{target}/profile")
+        data = self._request("GET", url)
+        return ActorProfile(
+            project_id=data["project_id"],
+            actor_id=data["actor_id"],
+            mission=data.get("mission"),
+            actions=data.get("actions", []),
+            attestations=data.get("attestations", []),
+            roles=data.get("roles", []),
+        )
+
+    def create_validation(
+        self,
+        task_id: str,
+        kind: str,
+        status: Optional[str] = None,
+        summary: Optional[str] = None,
+        issues: Optional[List[str]] = None,
+        url: Optional[str] = None,
+    ) -> Validation:
+        payload: Dict[str, Any] = {"kind": kind}
+        if status is not None:
+            payload["status"] = status
+        if summary is not None:
+            payload["summary"] = summary
+        if issues is not None:
+            payload["issues"] = issues
+        if url is not None:
+            payload["url"] = url
+        data = self._request("POST", self._project_path(f"tasks/{task_id}/validations"), payload)
+        return Validation(
+            id=data["id"],
+            project_id=data["project_id"],
+            task_id=data["task_id"],
+            kind=data["kind"],
+            status=data["status"],
+            summary=data.get("summary"),
+            issues=data.get("issues", []),
+            url=data.get("url"),
+            created_by=data["created_by"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+        )
+
+    def list_validations(self, task_id: str) -> List[Validation]:
+        data = self._request("GET", self._project_path(f"tasks/{task_id}/validations"))
+        items = data.get("items", [])
+        return [
+            Validation(
+                id=item["id"],
+                project_id=item["project_id"],
+                task_id=item["task_id"],
+                kind=item["kind"],
+                status=item["status"],
+                summary=item.get("summary"),
+                issues=item.get("issues", []),
+                url=item.get("url"),
+                created_by=item["created_by"],
+                created_at=item["created_at"],
+                updated_at=item["updated_at"],
+            )
+            for item in items
+        ]
+
+    def get_validation(self, validation_id: str) -> Validation:
+        data = self._request("GET", self._project_path(f"validations/{validation_id}"))
+        return Validation(
+            id=data["id"],
+            project_id=data["project_id"],
+            task_id=data["task_id"],
+            kind=data["kind"],
+            status=data["status"],
+            summary=data.get("summary"),
+            issues=data.get("issues", []),
+            url=data.get("url"),
+            created_by=data["created_by"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+        )
+
+    def update_validation(
+        self,
+        validation_id: str,
+        kind: Optional[str] = None,
+        status: Optional[str] = None,
+        summary: Optional[str] = None,
+        issues: Optional[List[str]] = None,
+        url: Optional[str] = None,
+    ) -> Validation:
+        payload: Dict[str, Any] = {}
+        if kind is not None:
+            payload["kind"] = kind
+        if status is not None:
+            payload["status"] = status
+        if summary is not None:
+            payload["summary"] = summary
+        if issues is not None:
+            payload["issues"] = issues
+        if url is not None:
+            payload["url"] = url
+        data = self._request("PATCH", self._project_path(f"validations/{validation_id}"), payload)
+        return Validation(
+            id=data["id"],
+            project_id=data["project_id"],
+            task_id=data["task_id"],
+            kind=data["kind"],
+            status=data["status"],
+            summary=data.get("summary"),
+            issues=data.get("issues", []),
+            url=data.get("url"),
+            created_by=data["created_by"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+        )

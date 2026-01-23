@@ -134,11 +134,23 @@ func (r Repo) DeleteProject(ctx context.Context, id string) error {
 }
 
 func (r Repo) UpsertProjectConfig(ctx context.Context, projectID string, cfg *config.Config) error {
-	return upsertProjectConfig(ctx, r.DB, nil, projectID, cfg)
+	if err := upsertProjectConfig(ctx, r.DB, nil, projectID, cfg); err != nil {
+		return err
+	}
+	if cfg != nil && cfg.Project.ActorMissions != nil {
+		return r.ReplaceActorMissions(ctx, projectID, cfg.Project.ActorMissions)
+	}
+	return nil
 }
 
 func (r Repo) UpsertProjectConfigTx(ctx context.Context, tx *sql.Tx, projectID string, cfg *config.Config) error {
-	return upsertProjectConfig(ctx, nil, tx, projectID, cfg)
+	if err := upsertProjectConfig(ctx, nil, tx, projectID, cfg); err != nil {
+		return err
+	}
+	if cfg != nil && cfg.Project.ActorMissions != nil {
+		return r.ReplaceActorMissionsTx(ctx, tx, projectID, cfg.Project.ActorMissions)
+	}
+	return nil
 }
 
 func upsertProjectConfig(ctx context.Context, db *sql.DB, tx *sql.Tx, projectID string, cfg *config.Config) error {

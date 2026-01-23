@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -460,6 +461,9 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 			if err := e.ensureSubtasksDone(ctx, tx, t.ID, opts.Force); err != nil {
 				return t, err
 			}
+			if err := e.ensureNoRejectedValidation(ctx, t.ProjectID, t.ID); err != nil {
+				return t, err
+			}
 			ok, err := e.isTaskValidationSatisfied(ctx, tx, t, opts.ActorID)
 			if err != nil {
 				return t, err
@@ -621,6 +625,9 @@ func (e Engine) TaskDone(ctx context.Context, taskID, workOutcomesJSON, actorID 
 		if err := e.ensureSubtasksDone(ctx, tx, t.ID, force); err != nil {
 			return t, err
 		}
+		if err := e.ensureNoRejectedValidation(ctx, t.ProjectID, t.ID); err != nil {
+			return t, err
+		}
 		satisfied, err := e.isTaskValidationSatisfied(ctx, tx, t, actorID)
 		if err != nil {
 			return t, err
@@ -693,6 +700,17 @@ func (e Engine) ensureSubtasksDone(ctx context.Context, tx *sql.Tx, taskID strin
 		if err := e.ensureSubtasksDone(ctx, tx, t.ID, force); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (e Engine) ensureNoRejectedValidation(ctx context.Context, projectID, taskID string) error {
+	rejected, err := e.Repo.HasRejectedValidation(ctx, projectID, taskID)
+	if err != nil {
+		return err
+	}
+	if rejected {
+		return errors.New("validation rejected")
 	}
 	return nil
 }
@@ -1150,6 +1168,303 @@ func (e Engine) DenyAttestationRole(ctx context.Context, projectID, actorID, kin
 	return tx.Commit()
 }
 
+// Actor mission operations
+
+func (e Engine) SetActorMission(ctx context.Context, projectID, targetActorID, mission, actorID string) (domain.ActorMission, error) {
+	trimmed := strings.TrimSpace(mission)
+	if trimmed == "" {
+		return domain.ActorMission{}, errors.New("mission is required")
+	}
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.ActorMission{}, err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "actor.mission.write"); err != nil {
+		return domain.ActorMission{}, err
+	}
+	am, err := e.Repo.UpsertActorMissionTx(ctx, tx, projectID, targetActorID, trimmed)
+	if err != nil {
+		return domain.ActorMission{}, err
+	}
+	if err := e.Events.Append(ctx, tx, "actor.mission.set", projectID, "rbac", projectID, actorID, events.EventPayload{
+		"actor_id": targetActorID,
+	}); err != nil {
+		return domain.ActorMission{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.ActorMission{}, err
+	}
+	return am, nil
+}
+
+func (e Engine) GetActorMission(ctx context.Context, projectID, targetActorID, actorID string) (domain.ActorMission, error) {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.ActorMission{}, err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "actor.mission.read"); err != nil {
+		return domain.ActorMission{}, err
+	}
+	am, err := e.Repo.GetActorMissionTx(ctx, tx, projectID, targetActorID)
+	if err != nil {
+		return domain.ActorMission{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.ActorMission{}, err
+	}
+	return am, nil
+}
+
+func (e Engine) ListActorMissions(ctx context.Context, projectID, targetActorID, actorID string) ([]domain.ActorMission, error) {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "actor.mission.list"); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return e.Repo.ListActorMissions(ctx, projectID, targetActorID)
+}
+
+func (e Engine) DeleteActorMission(ctx context.Context, projectID, targetActorID, actorID string) error {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "actor.mission.delete"); err != nil {
+		return err
+	}
+	if err := e.Repo.DeleteActorMissionTx(ctx, tx, projectID, targetActorID); err != nil {
+		return err
+	}
+	if err := e.Events.Append(ctx, tx, "actor.mission.deleted", projectID, "rbac", projectID, actorID, events.EventPayload{
+		"actor_id": targetActorID,
+	}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (e Engine) ActorProfile(ctx context.Context, projectID, targetActorID, actorID string) (domain.ActorProfile, error) {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.ActorProfile{}, err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "actor.mission.read"); err != nil {
+		return domain.ActorProfile{}, err
+	}
+	if err := e.ensureActor(ctx, tx, targetActorID); err != nil {
+		return domain.ActorProfile{}, err
+	}
+	roles, err := e.Auth.ActorRoles(ctx, tx, projectID, targetActorID)
+	if err != nil {
+		return domain.ActorProfile{}, err
+	}
+	perms, err := e.Auth.ActorPermissions(ctx, tx, projectID, targetActorID)
+	if err != nil {
+		return domain.ActorProfile{}, err
+	}
+	kinds, err := e.Auth.ActorAttestationKinds(ctx, tx, projectID, targetActorID)
+	if err != nil {
+		return domain.ActorProfile{}, err
+	}
+	var mission string
+	if am, err := e.Repo.GetActorMissionTx(ctx, tx, projectID, targetActorID); err == nil {
+		mission = am.Mission
+	} else if !errors.Is(err, repo.ErrNotFound) {
+		return domain.ActorProfile{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.ActorProfile{}, err
+	}
+	return domain.ActorProfile{
+		ProjectID:    projectID,
+		ActorID:      targetActorID,
+		Mission:      mission,
+		Actions:      perms,
+		Attestations: kinds,
+		Roles:        roles,
+	}, nil
+}
+
+type ValidationCreateOptions struct {
+	ProjectID string
+	TaskID    string
+	Kind      string
+	Status    string
+	Summary   string
+	Issues    []string
+	URL       string
+	ActorID   string
+}
+
+type ValidationUpdateOptions struct {
+	ID      string
+	Kind    string
+	Status  string
+	Summary string
+	Issues  []string
+	URL     string
+	ActorID string
+}
+
+func (e Engine) CreateValidation(ctx context.Context, opts ValidationCreateOptions) (domain.Validation, error) {
+	if strings.TrimSpace(opts.TaskID) == "" {
+		return domain.Validation{}, errors.New("task_id required")
+	}
+	if strings.TrimSpace(opts.Kind) == "" {
+		return domain.Validation{}, errors.New("kind required")
+	}
+	status := strings.TrimSpace(opts.Status)
+	if status == "" {
+		status = "draft"
+	}
+	if status != "draft" && status != "accepted" && status != "rejected" {
+		return domain.Validation{}, errors.New("invalid validation status")
+	}
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Validation{}, err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, opts.ProjectID, opts.ActorID, "validation.create"); err != nil {
+		return domain.Validation{}, err
+	}
+	task, err := e.Repo.GetTaskTx(ctx, tx, opts.TaskID)
+	if err != nil {
+		return domain.Validation{}, err
+	}
+	if task.ProjectID != opts.ProjectID {
+		return domain.Validation{}, errors.New("task not in project")
+	}
+	now := e.now().UTC().Format(time.RFC3339)
+	v := domain.Validation{
+		ID:        uuid.NewString(),
+		ProjectID: opts.ProjectID,
+		TaskID:    opts.TaskID,
+		Kind:      opts.Kind,
+		Status:    status,
+		Summary:   strings.TrimSpace(opts.Summary),
+		Issues:    opts.Issues,
+		URL:       strings.TrimSpace(opts.URL),
+		CreatedBy: opts.ActorID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	v, err = e.Repo.CreateValidationTx(ctx, tx, v)
+	if err != nil {
+		return domain.Validation{}, err
+	}
+	if err := e.Events.Append(ctx, tx, "validation.created", opts.ProjectID, "validation", v.ID, opts.ActorID, events.EventPayload{
+		"task_id": v.TaskID,
+		"kind":    v.Kind,
+		"status":  v.Status,
+	}); err != nil {
+		return domain.Validation{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Validation{}, err
+	}
+	return v, nil
+}
+
+func (e Engine) UpdateValidation(ctx context.Context, opts ValidationUpdateOptions) (domain.Validation, error) {
+	if strings.TrimSpace(opts.ID) == "" {
+		return domain.Validation{}, errors.New("id required")
+	}
+	status := strings.TrimSpace(opts.Status)
+	if status != "" && status != "draft" && status != "accepted" && status != "rejected" {
+		return domain.Validation{}, errors.New("invalid validation status")
+	}
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Validation{}, err
+	}
+	defer tx.Rollback()
+	existing, err := e.Repo.GetValidationTx(ctx, tx, opts.ID)
+	if err != nil {
+		return domain.Validation{}, err
+	}
+	if err := e.requirePermission(ctx, tx, existing.ProjectID, opts.ActorID, "validation.update"); err != nil {
+		return domain.Validation{}, err
+	}
+	if opts.Kind != "" {
+		existing.Kind = opts.Kind
+	}
+	if status != "" {
+		existing.Status = status
+	}
+	if opts.Summary != "" {
+		existing.Summary = strings.TrimSpace(opts.Summary)
+	}
+	if opts.Issues != nil {
+		existing.Issues = opts.Issues
+	}
+	if opts.URL != "" {
+		existing.URL = strings.TrimSpace(opts.URL)
+	}
+	existing.UpdatedAt = e.now().UTC().Format(time.RFC3339)
+	updated, err := e.Repo.UpdateValidationTx(ctx, tx, existing)
+	if err != nil {
+		return domain.Validation{}, err
+	}
+	if err := e.Events.Append(ctx, tx, "validation.updated", existing.ProjectID, "validation", existing.ID, opts.ActorID, events.EventPayload{
+		"task_id": existing.TaskID,
+		"status":  existing.Status,
+	}); err != nil {
+		return domain.Validation{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Validation{}, err
+	}
+	return updated, nil
+}
+
+func (e Engine) GetValidation(ctx context.Context, projectID, id, actorID string) (domain.Validation, error) {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Validation{}, err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "validation.read"); err != nil {
+		return domain.Validation{}, err
+	}
+	v, err := e.Repo.GetValidationTx(ctx, tx, id)
+	if err != nil {
+		return domain.Validation{}, err
+	}
+	if v.ProjectID != projectID {
+		return domain.Validation{}, errors.New("validation not in project")
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Validation{}, err
+	}
+	return v, nil
+}
+
+func (e Engine) ListValidations(ctx context.Context, projectID, taskID, actorID string) ([]domain.Validation, error) {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "validation.list"); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return e.Repo.ListValidationsByTask(ctx, projectID, taskID)
+}
+
 // --- helpers ---
 
 func optionalString(s string) *string {
@@ -1201,6 +1516,14 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 		"project.config.read":  "Read project config",
 		"project.status.read":  "Read project status",
 		"project.events.read":  "Read project events",
+		"actor.mission.read":   "Read actor mission",
+		"actor.mission.list":   "List actor missions",
+		"actor.mission.write":  "Update actor mission",
+		"actor.mission.delete": "Delete actor mission",
+		"validation.create":    "Create validation",
+		"validation.read":      "Read validation",
+		"validation.list":      "List validations",
+		"validation.update":    "Update validation",
 		"task.create":          "Create task",
 		"task.list":            "List tasks",
 		"task.read":            "Read task",
@@ -1242,6 +1565,10 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 		"project.config.read",
 		"project.status.read",
 		"project.events.read",
+		"actor.mission.read",
+		"actor.mission.list",
+		"validation.read",
+		"validation.list",
 		"task.list",
 		"task.read",
 		"task.next",

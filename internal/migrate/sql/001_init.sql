@@ -68,6 +68,22 @@ CREATE TABLE IF NOT EXISTS tasks(
   required_threshold INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS validations(
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  status TEXT CHECK(status IN ('draft','accepted','rejected')) NOT NULL,
+  summary TEXT,
+  issues_json TEXT,
+  url TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_validations_task ON validations(task_id);
+CREATE INDEX IF NOT EXISTS idx_validations_project ON validations(project_id);
+
 CREATE TABLE IF NOT EXISTS task_deps(
   task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
   depends_on_task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
@@ -167,6 +183,16 @@ CREATE TABLE IF NOT EXISTS org_roles(
   role TEXT NOT NULL,
   PRIMARY KEY(org_id, actor_id)
 );
+
+CREATE TABLE IF NOT EXISTS actor_missions(
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  actor_id TEXT NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  mission TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(project_id, actor_id)
+);
+CREATE INDEX IF NOT EXISTS idx_actor_missions_actor ON actor_missions(actor_id);
 
 INSERT OR IGNORE INTO organizations(id, name, created_at)
 VALUES ('default-org','Default Org',strftime('%Y-%m-%dT%H:%M:%SZ','now'));

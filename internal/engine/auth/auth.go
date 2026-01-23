@@ -105,3 +105,25 @@ WHERE ar.project_id=? AND ar.actor_id=? AND aa.project_id=? AND aa.kind=? LIMIT 
 	}
 	return err == nil, err
 }
+
+func (s Service) ActorAttestationKinds(ctx context.Context, tx *sql.Tx, projectID, actorID string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `
+SELECT DISTINCT aa.kind
+FROM actor_roles ar
+JOIN attestation_authorities aa ON aa.role_id=ar.role_id
+WHERE ar.project_id=? AND ar.actor_id=? AND aa.project_id=?`,
+		projectID, actorID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var kinds []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		kinds = append(kinds, k)
+	}
+	return kinds, rows.Err()
+}

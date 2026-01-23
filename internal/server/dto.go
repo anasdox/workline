@@ -131,6 +131,18 @@ type CreateAttestationRequest struct {
 	Payload    map[string]any `json:"payload,omitempty" example:"{\"note\":\"LGTM\"}"`
 }
 
+type ActorMissionRequest struct {
+	Mission string `json:"mission"`
+}
+
+type ValidationRequest struct {
+	Kind    string   `json:"kind"`
+	Status  string   `json:"status,omitempty"`
+	Summary string   `json:"summary,omitempty"`
+	Issues  []string `json:"issues,omitempty"`
+	URL     string   `json:"url,omitempty"`
+}
+
 // Response payloads
 
 type ProjectResponse struct {
@@ -232,6 +244,8 @@ type projectConfigSection struct {
 	TaskTypes      map[string]taskTypeConfigResponse      `json:"task_types"`
 	IterationTypes map[string]iterationTypeConfigResponse `json:"iteration_types,omitempty"`
 	Attestations   []attestationConfigResponse            `json:"attestations"`
+	ActorMissions  []actorMissionConfigResponse           `json:"actor_missions,omitempty"`
+	Validation     validationConfigResponse               `json:"validation,omitempty"`
 	RBAC           rbacConfigResponse                     `json:"rbac"`
 }
 
@@ -251,6 +265,16 @@ type attestationConfigResponse struct {
 	ID          string `json:"id"`
 	Category    string `json:"category,omitempty"`
 	Description string `json:"description"`
+}
+
+type actorMissionConfigResponse struct {
+	ActorID string `json:"actor_id"`
+	Mission string `json:"mission"`
+}
+
+type validationConfigResponse struct {
+	Mode             string `json:"mode,omitempty"`
+	ChallengerPrompt string `json:"challenger_prompt,omitempty"`
 }
 
 type rbacConfigResponse struct {
@@ -310,6 +334,45 @@ type DevLoginRequest struct {
 
 type DevLoginResponse struct {
 	Token string `json:"token"`
+}
+
+type ActorMissionResponse struct {
+	ProjectID string `json:"project_id"`
+	ActorID   string `json:"actor_id"`
+	Mission   string `json:"mission"`
+	CreatedAt string `json:"created_at" format:"date-time"`
+	UpdatedAt string `json:"updated_at" format:"date-time"`
+}
+
+type ActorMissionsResponse struct {
+	Items []ActorMissionResponse `json:"items"`
+}
+
+type ActorProfileResponse struct {
+	ProjectID    string   `json:"project_id"`
+	ActorID      string   `json:"actor_id"`
+	Mission      string   `json:"mission,omitempty"`
+	Actions      []string `json:"actions"`
+	Attestations []string `json:"attestations"`
+	Roles        []string `json:"roles"`
+}
+
+type ValidationResponse struct {
+	ID        string   `json:"id"`
+	ProjectID string   `json:"project_id"`
+	TaskID    string   `json:"task_id"`
+	Kind      string   `json:"kind"`
+	Status    string   `json:"status"`
+	Summary   string   `json:"summary,omitempty"`
+	Issues    []string `json:"issues,omitempty"`
+	URL       string   `json:"url,omitempty"`
+	CreatedBy string   `json:"created_by"`
+	CreatedAt string   `json:"created_at" format:"date-time"`
+	UpdatedAt string   `json:"updated_at" format:"date-time"`
+}
+
+type ValidationsResponse struct {
+	Items []ValidationResponse `json:"items"`
 }
 
 // Conversion helpers
@@ -407,6 +470,43 @@ func leaseResponse(l domain.Lease) LeaseResponse {
 	}
 }
 
+func actorMissionResponse(m domain.ActorMission) ActorMissionResponse {
+	return ActorMissionResponse{
+		ProjectID: m.ProjectID,
+		ActorID:   m.ActorID,
+		Mission:   m.Mission,
+		CreatedAt: m.CreatedAt,
+		UpdatedAt: m.UpdatedAt,
+	}
+}
+
+func actorProfileResponse(p domain.ActorProfile) ActorProfileResponse {
+	return ActorProfileResponse{
+		ProjectID:    p.ProjectID,
+		ActorID:      p.ActorID,
+		Mission:      p.Mission,
+		Actions:      nonNilSlice(p.Actions),
+		Attestations: nonNilSlice(p.Attestations),
+		Roles:        nonNilSlice(p.Roles),
+	}
+}
+
+func validationResponse(v domain.Validation) ValidationResponse {
+	return ValidationResponse{
+		ID:        v.ID,
+		ProjectID: v.ProjectID,
+		TaskID:    v.TaskID,
+		Kind:      v.Kind,
+		Status:    v.Status,
+		Summary:   v.Summary,
+		Issues:    nonNilSlice(v.Issues),
+		URL:       v.URL,
+		CreatedBy: v.CreatedBy,
+		CreatedAt: v.CreatedAt,
+		UpdatedAt: v.UpdatedAt,
+	}
+}
+
 func configResponse(cfg *config.Config) ProjectConfigResponse {
 	res := ProjectConfigResponse{
 		Project: projectConfigSection{
@@ -414,6 +514,11 @@ func configResponse(cfg *config.Config) ProjectConfigResponse {
 			TaskTypes:      map[string]taskTypeConfigResponse{},
 			IterationTypes: map[string]iterationTypeConfigResponse{},
 			Attestations:   []attestationConfigResponse{},
+			ActorMissions:  []actorMissionConfigResponse{},
+			Validation: validationConfigResponse{
+				Mode:             cfg.Project.Validation.Mode,
+				ChallengerPrompt: cfg.Project.Validation.ChallengerPrompt,
+			},
 			RBAC: rbacConfigResponse{
 				Permissions: map[string][]string{},
 				Roles:       map[string]rbacRoleResponse{},
@@ -439,6 +544,12 @@ func configResponse(cfg *config.Config) ProjectConfigResponse {
 			ID:          att.ID,
 			Category:    att.Category,
 			Description: att.Description,
+		})
+	}
+	for _, mission := range cfg.Project.ActorMissions {
+		res.Project.ActorMissions = append(res.Project.ActorMissions, actorMissionConfigResponse{
+			ActorID: mission.ActorID,
+			Mission: mission.Mission,
 		})
 	}
 	for name, perms := range cfg.Project.RBAC.Permissions {
